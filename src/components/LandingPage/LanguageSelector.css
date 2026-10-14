@@ -1,0 +1,82 @@
+.lp-lang-selector {
+  position: relative;
+  display: inline-block;
+}
+
+.lp-lang-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--lp-border, rgba(226, 232, 240, 0.8));
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  color: var(--lp-text-primary, #334155);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lp-lang-btn:hover {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+}
+
+.lp-lang-arrow {
+  transition: transform 0.2s ease;
+}
+.lp-lang-arrow.open {
+  transform: rotate(180deg);
+}
+
+.lp-lang-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: white;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 12px;
+  padding: 8px;
+  min-width: 130px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lp-lang-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.lp-lang-option:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.lp-lang-option.active {
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+@media (max-width: 1200px) {
+  .lp-lang-btn {
+    padding: 0.6rem 0.8rem;
+  }
+  .lp-lang-current {
+    display: none; /* Hide text on laptop/mobile to save space */
+  }
+}
