@@ -276,11 +276,75 @@ async function initDB() {
 
     console.log('✅ Prefixed MySQL tables ready (Multi-Tenant)');
   } finally {
+    
+    // Auto-seed Kumbh Mela dataset if ap_floors is empty
+    try {
+      const [flrRows] = await conn.execute("SELECT count(*) as c FROM ap_floors WHERE project_id = 'upmela'");
+      if (flrRows[0].c === 0) {
+        const seedPath = path.join(__dirname, 'kumbh_seed.json');
+        if (fs.existsSync(seedPath)) {
+          const seedData = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+          const bt = String.fromCharCode(96);
+          for (const [table, rows] of Object.entries(seedData)) {
+            if (!rows || rows.length === 0) continue;
+            for (const row of rows) {
+              const keys = Object.keys(row);
+              const values = Object.values(row);
+              const placeholders = keys.map(() => '?').join(', ');
+              const colList = keys.map(k => bt + k + bt).join(', ');
+              const sql = 'INSERT IGNORE INTO ' + table + ' (' + colList + ') VALUES (' + placeholders + ')';
+              try {
+                await conn.execute(sql, values);
+              } catch (e) {}
+            }
+          }
+          console.log('✅ Kumbh Mela dataset auto-seeded successfully!');
+        }
+      }
+    } catch (e) {
+      console.warn('Auto-seed check warning:', e.message);
+    }
+
     conn.release();
   }
 }
 
 // ── DATABASE BROWSER VIEWER ────────────────────────────────────────────────────
+
+// Serverless DB Auto-Init Middleware
+let isDbInitialized = false;
+let initDbPromise = null;
+app.use('/api', async (req, res, next) => {
+  if (!isDbInitialized) {
+    if (!initDbPromise) {
+      initDbPromise = initDB().then(() => {
+        isDbInitialized = true;
+        console.log('✅ DB tables & data ready');
+      }).catch(err => {
+        initDbPromise = null;
+        console.error('DB init failed:', err.message);
+        throw err;
+      });
+    }
+    try {
+      await initDbPromise;
+    } catch (err) {
+      return res.status(500).json({ error: 'DB Init Error: ' + err.message });
+    }
+  }
+  next();
+});
+
+app.get('/api/init-db', async (req, res) => {
+  try {
+    await initDB();
+    isDbInitialized = true;
+    res.json({ success: true, message: 'All tables and Kumbh Mela sectors initialized in TiDB!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/admin/db', async (req, res) => {
   try {
     const [floors] = await pool.execute('SELECT * FROM ap_floors ORDER BY sort_order');
