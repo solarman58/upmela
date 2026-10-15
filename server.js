@@ -1688,6 +1688,12 @@ const uploadToCloudinary = (buffer, folder) => {
 app.post('/api/upload-poi-image', verifyToken, uploadMiddleware.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
+    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+      console.log('Uploading POI image to Cloudinary...');
+      const cloudUrl = await uploadToCloudinary(req.file.buffer, 'upmela/poi-images');
+      console.log('✅ POI image uploaded to Cloudinary:', cloudUrl);
+      return res.json({ url: cloudUrl });
+    }
     const ext = path.extname(req.file.originalname) || '.jpg';
     const filename = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
     const dir = path.join(__dirname, 'public', 'poi-images');
@@ -1703,6 +1709,12 @@ app.post('/api/upload-poi-image', verifyToken, uploadMiddleware.single('image'),
 app.post('/api/upload-floor-map', verifyToken, uploadMiddleware.single('map'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
+    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+      console.log('Uploading floor map to Cloudinary...');
+      const cloudUrl = await uploadToCloudinary(req.file.buffer, 'upmela/floor-maps');
+      console.log('✅ Floor map uploaded to Cloudinary:', cloudUrl);
+      return res.json({ url: cloudUrl });
+    }
     const ext = path.extname(req.file.originalname) || '.jpg';
     const filename = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
     const mapsDir = path.join(__dirname, 'public', 'maps');
@@ -1719,6 +1731,12 @@ app.post('/api/upload-floor-map', verifyToken, uploadMiddleware.single('map'), a
 app.post('/api/upload-logo', verifyToken, uploadMiddleware.single('logo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
+    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+      console.log('Uploading logo to Cloudinary...');
+      const cloudUrl = await uploadToCloudinary(req.file.buffer, 'upmela/logos');
+      console.log('✅ Logo uploaded to Cloudinary:', cloudUrl);
+      return res.json({ url: cloudUrl });
+    }
     const ext = path.extname(req.file.originalname) || '.png';
     const filename = `logo_${Date.now()}${ext}`;
     const dir = path.join(__dirname, 'public', 'maps');
@@ -1730,7 +1748,7 @@ app.post('/api/upload-logo', verifyToken, uploadMiddleware.single('logo'), async
   }
 });
 
-// ── Global JSON Error Handler (must be LAST middleware, BEFORE catch-all) ──────
+// ─── Global JSON Error Handler (must be LAST middleware, BEFORE catch-all) ───
 app.use('/api', (err, req, res, next) => {
   console.error('[API Error]', err.message);
   res.status(err.status || 500).json({ error: err.message || 'An internal server error occurred.' });
