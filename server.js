@@ -284,9 +284,9 @@ async function initDB() {
     try {
       const [flrRows] = await conn.execute("SELECT count(*) as c FROM ap_nodes WHERE project_id = 'upmela'");
       if (flrRows[0].c === 0) {
-        const seedPath = path.join(__dirname, 'kumbh_seed.json');
-        if (fs.existsSync(seedPath)) {
-          const seedData = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+        // Auto-load seed data via require so Vercel bundles it
+        try {
+          const seedData = require('./kumbh_seed.json');
           const bt = String.fromCharCode(96);
           for (const [table, rows] of Object.entries(seedData)) {
             if (!rows || rows.length === 0) continue;
@@ -302,6 +302,8 @@ async function initDB() {
             }
           }
           console.log('✅ Kumbh Mela dataset auto-seeded successfully!');
+        } catch (seedErr) {
+          console.error('Seed error:', seedErr.message);
         }
       }
     } catch (e) {
