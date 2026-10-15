@@ -4,7 +4,7 @@
  * Enables full offline navigation after first load.
  */
 
-const CACHE_NAME = 'airport-nav-v2';
+const CACHE_NAME = 'kumbh-nav-v3';
 const API_CACHE  = 'airport-api-v2';
 const MAP_CACHE  = 'airport-maps-v1'; // Keep maps cache stable (v1) so prefetch survives SW update
 
@@ -118,7 +118,7 @@ async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), request.url.includes("/api/") ? 30000 : 10000);
     const response = await fetch(request, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (response.ok) cache.put(request, response.clone());
