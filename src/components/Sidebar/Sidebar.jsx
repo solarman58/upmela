@@ -40,6 +40,8 @@ export default function Sidebar() {
   const [expandedPoiId, setExpandedPoiId] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const isOnline = useNetworkStatus();
+  const appSettings = useMapStore(state => state.appSettings);
+  const isMela = appSettings?.project_type === 'Mela' || appSettings?.project_type === 'Kumbh Mela';
   
   const currentBuilding = useMapStore(state => state.currentBuilding);
   const buildings = useMapStore(state => state.buildings);
@@ -103,7 +105,11 @@ export default function Sidebar() {
     setTimeout(() => zoomMapTo(navigationStart.x, navigationStart.y, 3.5), 300);
   };
 
-  const flatPois = getFlatPois();
+  const isSectorPOI = (p) => {
+    const name = (p.name || '').toLowerCase().trim();
+    return name.startsWith('sector ') || /^sector\s*\d+/i.test(name);
+  };
+  const flatPois = getFlatPois().filter(p => !isSectorPOI(p));
 
   // Show nodes from all floors in navigate dropdowns
   const allNavigableNodes = nodes.filter(
@@ -157,7 +163,7 @@ export default function Sidebar() {
     { id: 'explore', label: 'Explore', icon: <FiSearch className="w-3.5 h-3.5" /> },
     { id: 'navigate', label: 'Directions', icon: <FiCompass className="w-3.5 h-3.5" /> },
     { id: 'tagging', label: 'Tag', icon: <FiEdit3 className="w-3.5 h-3.5" /> },
-    { id: 'floors', label: 'Floors', icon: <FiLayers className="w-3.5 h-3.5" /> },
+    { id: 'floors', label: isMela ? 'Sectors' : 'Floors', icon: <FiLayers className="w-3.5 h-3.5" /> },
     { id: 'categories', label: 'Types', icon: <FiTag className="w-3.5 h-3.5" /> },
     { id: 'settings', label: 'Settings', icon: <FiSettings className="w-3.5 h-3.5" /> },
     { id: 'profile', label: 'Profile', icon: <FiUser className="w-3.5 h-3.5" /> },
@@ -337,11 +343,11 @@ export default function Sidebar() {
                 <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.04]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\\"20\\" height=\\"20\\" xmlns=\\"http://www.w3.org/2000/svg\\"%3E%3Cpath d=\\"M0 0h20v20H0z\\" fill=\\"none\\"%3E%3C/path%3E%3Ccircle cx=\\"10\\" cy=\\"10\\" r=\\"1\\" fill=\\"%23fff\\"%3E%3C/circle%3E%3C/svg%3E")' }}></div>
                 
                 <div className="relative z-10">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Current Floor</p>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">{isMela ? 'Current Sector / Map' : 'Current Floor'}</p>
                   <div className="flex justify-between items-end mb-5">
                     <h3 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
                       {floors.find(f => f.id === currentFloor)?.name || 'Unknown'}
-                      <span className="text-[8px] font-black bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-500/20 tracking-wider">ACTIVE</span>
+                      <span className="text-[8px] font-black bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-500/20 tracking-wider">{floors.find(f => f.id === currentFloor)?.level === 'MAIN' ? 'OVERVIEW' : 'ACTIVE'}</span>
                     </h3>
                   </div>
 
@@ -359,20 +365,34 @@ export default function Sidebar() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {floors.map(f => (
-                      <button
-                        key={f.id}
-                        onClick={() => setFloor(f.id)}
-                        className={`flex-grow md:flex-grow-0 px-4 py-2.5 rounded-[14px] text-[11px] font-bold transition-all active:scale-95 text-center ${currentFloor === f.id
-                            ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/25 border border-transparent'
-                            : 'bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10 hover:bg-slate-200 dark:hover:bg-white/10'
-                          }`}
-                      >
-                        {f.name}
-                      </button>
-                    ))}
-                  </div>
+                  {isMela ? (
+                    <div className="pt-2">
+                      {floors.find(f => f.id === currentFloor)?.level !== 'MAIN' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const mainFloor = floors.find(f => f.level === 'MAIN' || (f.name || '').toLowerCase().includes('main'));
+                            if (mainFloor) {
+                              const cleanUrl = new URL(window.location);
+                              cleanUrl.searchParams.delete('sector');
+                              cleanUrl.searchParams.delete('floor');
+                              window.history.replaceState({}, '', cleanUrl);
+                              setFloor(mainFloor.id);
+                            }
+                          }}
+                          className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold text-xs shadow-md hover:from-amber-600 hover:to-orange-600 flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                        >
+                          <span>🌐</span>
+                          <span>मुख्य मेला ग्राउंड (Master Overview) पर जाएँ</span>
+                        </button>
+                      ) : (
+                        <div className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-2">
+                          <span>🌐</span>
+                          <span>संपूर्ण मेला क्षेत्र व 22 सेक्टर्स का मास्टर ओवरव्यू</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 pb-2 pt-1">
@@ -531,7 +551,7 @@ export default function Sidebar() {
                                       <LucideIcons.MapPin className="w-3 h-3" /> From Here
                                     </button>
                                     <button onClick={() => { setNavigationMode(true); if (navigationStart?.id === poi.id) setNavigationStart(null); setNavigationEnd(poi); setActiveTab('navigate'); }}
-                                      className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-black bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white border border-transparent rounded-xl shadow-[0_4px_15px_rgba(14,165,233,0.3)] transition-all active:scale-95">
+                                      className="flex-1 py-2.5 flex items-center justify-center gap-1.5 text-[11px] font-black bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white border border-transparent rounded-xl shadow-md shadow-orange-500/30 transition-all active:scale-95">
                                       <LucideIcons.Navigation className="w-3 h-3" /> To Here
                                     </button>
                                   </div>
@@ -557,15 +577,15 @@ export default function Sidebar() {
           {(!navigationMode && isMobile) ? (
             <div className="flex flex-col items-center py-8 gap-4">
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-3xl shadow-lg shadow-sky-500/30">🧭</div>
-              <div className="text-center"><h3 className="font-bold text-slate-800 dark:text-slate-100 mb-1">Indoor Navigation</h3><p className="text-xs text-slate-400 max-w-[220px]">Find the fastest path between any two points in the airport.</p></div>
-              <button onClick={() => setNavigationMode(true)} className="px-6 py-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-bold text-sm shadow-lg shadow-sky-500/25 transition active:scale-95">Start Route Finder</button>
+              <div className="text-center"><h3 className="font-bold text-slate-800 dark:text-slate-100 mb-1">मेला मार्ग दर्शन (Mela Navigation)</h3><p className="text-xs text-slate-400 max-w-[240px]">संगम, घाट, सेक्टर और अखाड़ों के बीच सबसे सुगम मार्ग खोजें।</p></div>
+              <button onClick={() => setNavigationMode(true)} className="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-sm shadow-lg shadow-orange-500/30 transition active:scale-95">मार्ग खोजें (Find Route)</button>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
               {/* Start/End selects */}
               <div className="flex flex-col gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-800/30">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0"><span className="text-white text-xs font-black">A</span></div>
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center flex-shrink-0 shadow-sm"><span className="text-white text-xs font-black">A</span></div>
                   <SearchableSelect
                     placeholder="Starting point..."
                     options={allNavigableNodes.map(p => ({ value: p.id, label: `${p.name} · ${capitalize(p.floor)}` }))}
@@ -578,7 +598,7 @@ export default function Sidebar() {
                 </div>
                 <div className="ml-4 w-0.5 h-4 bg-slate-200 dark:bg-slate-700 rounded" />
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-sky-500 flex items-center justify-center flex-shrink-0"><span className="text-white text-xs font-black">B</span></div>
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center flex-shrink-0 shadow-sm"><span className="text-white text-xs font-black">B</span></div>
                   <SearchableSelect
                     placeholder="Destination..."
                     options={allNavigableNodes.map(p => ({ value: p.id, label: `${p.name} · ${capitalize(p.floor)}` }))}
@@ -603,7 +623,7 @@ export default function Sidebar() {
 
               {/* View on Map CTA */}
               {navigationStart && navigationEnd && (
-                <button onClick={viewOnMap} className="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-bold text-sm shadow-xl shadow-sky-500/30 flex items-center justify-center gap-2 active:scale-95 transition-all">
+                <button onClick={viewOnMap} className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-sm shadow-xl shadow-orange-500/30 flex items-center justify-center gap-2 active:scale-95 transition-all">
                   <span>🗺️</span> View Route on Map
                 </button>
               )}
@@ -763,8 +783,8 @@ export default function Sidebar() {
     ];
 
     const colorMap = {
-      sky: { active: 'text-sky-500', bg: 'bg-sky-500/12' },
-      indigo: { active: 'text-indigo-500', bg: 'bg-indigo-500/12' },
+      sky: { active: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/15' },
+      indigo: { active: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-500/15' },
       emerald: { active: 'text-emerald-500', bg: 'bg-emerald-500/12' },
       violet: { active: 'text-violet-500', bg: 'bg-violet-500/12' },
       rose: { active: 'text-rose-500', bg: 'bg-rose-500/12' },
@@ -791,11 +811,11 @@ export default function Sidebar() {
           animate={{ y: isOpen ? 0 : '100%' }}
           transition={{ type: 'spring', damping: 28, stiffness: 320, mass: 0.8 }}
           className="fixed left-0 right-0 z-50 pointer-events-auto"
-          style={{ bottom: '60px', maxHeight: '76vh' }}
+          style={{ bottom: 'calc(58px + env(safe-area-inset-bottom, 8px))', maxHeight: 'calc(78dvh - env(safe-area-inset-bottom, 0px))' }}
         >
           <div
             className="mx-3 bg-white dark:bg-slate-900 rounded-[28px] shadow-2xl shadow-black/25 border border-slate-200/50 dark:border-slate-700/30 overflow-hidden flex flex-col"
-            style={{ maxHeight: '76vh' }}
+            style={{ maxHeight: 'calc(78dvh - env(safe-area-inset-bottom, 0px))' }}
           >
             {/* Handle Bar — ONLY this area triggers swipe-to-close */}
             <div
@@ -830,8 +850,8 @@ export default function Sidebar() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] font-black text-slate-800 dark:text-slate-100 truncate">{useMapStore.getState().appSettings?.name || 'Airport Navigation'}</p>
-                <p className="text-[10px] font-bold text-sky-500 uppercase tracking-widest">Indoor Map</p>
+                <p className="text-[13px] font-black text-slate-800 dark:text-slate-100 truncate">{(!useMapStore.getState().appSettings?.name || useMapStore.getState().appSettings?.name.toLowerCase().includes('airport')) ? 'महाकुंभ मेला प्रयागराज' : useMapStore.getState().appSettings?.name}</p>
+                <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">{isMela ? 'महाकुंभ प्रयागराज' : 'Indoor Map'}</p>
               </div>
               {/* Close button */}
               <button
@@ -866,7 +886,7 @@ export default function Sidebar() {
             </div>
 
             {/* Scrollable Content */}
-            <div className="overflow-y-auto flex-1 px-4 pb-4 custom-scrollbar overscroll-contain">
+            <div className="overflow-y-auto flex-1 px-4 pb-8 custom-scrollbar overscroll-contain">
               {renderTabContent()}
             </div>
           </div>
@@ -910,8 +930,8 @@ export default function Sidebar() {
 
   // ── DESKTOP: Sidebar ───────────────────────────────────────────────────────
   const tabColors = {
-    explore: 'from-sky-400 to-blue-600 shadow-sky-500/40',
-    navigate: 'from-indigo-500 to-violet-600 shadow-indigo-500/40',
+    explore: 'from-amber-500 to-orange-600 shadow-orange-500/30',
+    navigate: 'from-orange-500 to-amber-600 shadow-orange-500/30',
     tagging: 'from-emerald-400 to-teal-600 shadow-emerald-500/40',
     floors: 'from-amber-400 to-orange-500 shadow-amber-500/40',
     categories: 'from-pink-500 to-rose-600 shadow-pink-500/40',
@@ -980,7 +1000,7 @@ export default function Sidebar() {
               {useMapStore.getState().appSettings?.name || 'Global Navigation'}
             </h2>
             <p className="text-[10px] font-bold text-sky-500 uppercase tracking-widest mt-0.5">
-              Indoor Map - {tabs.find(t => t.id === activeTab)?.label || 'Menu'}
+              {isMela ? 'महाकुंभ मेला' : 'Indoor Map'} - {tabs.find(t => t.id === activeTab)?.label || 'Menu'}
             </p>
           </div>
           <button onClick={() => setIsOpen(false)} className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 flex flex-shrink-0 items-center justify-center text-slate-500 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white transition">

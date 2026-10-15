@@ -6,7 +6,7 @@ import { useMapStore } from '../../store/useMapStore';
 import SearchableSelect from './SearchableSelect';
 
 const AVAILABLE_ICONS = [
-  'Plane', 'Briefcase', 'Shield', 'ShoppingBag', 'Coffee', 'Droplet', 'Stethoscope', 
+  'Waves', 'Tent', 'HeartPulse', 'Bath', 'Landmark', 'GitCommit', 'Plane', 'Briefcase', 'Shield', 'ShoppingBag', 'Coffee', 'Droplet', 'Stethoscope', 
   'AlertTriangle', 'Bed', 'Pill', 'Pizza', 'TrendingUp', 'Car', 'Train', 'Ticket', 
   'LogOut', 'Layout', 'Store', 'BookOpen', 'FlaskConical', 'Library', 'Building', 
   'DoorOpen', 'Star', 'ChevronsUp', 'MapPin', 'Wine', 'Banknote', 'Archive', 
@@ -102,7 +102,7 @@ export default function CategoryManager() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar relative">
+      <div className="flex-1 overflow-y-auto p-4 pb-48 space-y-3 custom-scrollbar relative">
         <div className="absolute inset-x-0 top-0 h-4 bg-gradient-to-b from-white dark:from-slate-900 to-transparent z-10 pointer-events-none" />
         
         {categories.length === 0 && (
@@ -116,7 +116,7 @@ export default function CategoryManager() {
             key={cat.id || index}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="group flex flex-col gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl hover:border-indigo-300 dark:hover:border-indigo-500/30 transition-colors"
+            className={`group flex flex-col gap-3 p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl transition-all relative ${activeSelectIndex === index ? "z-30 ring-2 ring-indigo-500/20" : "z-1"}`}
           >
             <div className="flex items-center gap-3">
               {/* Icon Preview */}
@@ -147,23 +147,23 @@ export default function CategoryManager() {
               </button>
             </div>
 
-            <div className="flex flex-wrap gap-2 items-center">
-              {/* Color Picker (Native) */}
-              <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Color</span>
+            <div className="flex items-center gap-2">
+              {/* Color Picker */}
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 shadow-sm flex-shrink-0">
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Color</span>
                 <input 
                   type="color" 
                   value={cat.color || '#3b82f6'} 
                   onChange={(e) => handleUpdate(index, 'color', e.target.value)}
-                  className="w-5 h-5 cursor-pointer bg-transparent border-0 p-0"
+                  className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 p-0"
                 />
               </div>
               
-              {/* Icon Selector */}
-              <div className="flex items-center gap-2 flex-1 relative z-10">
+              {/* Icon Selector with icon preview */}
+              <div className="flex-1 min-w-0 relative">
                 <SearchableSelect
                   placeholder="Select icon..."
-                  options={AVAILABLE_ICONS.map(iconName => ({ value: iconName, label: iconName }))}
+                  options={AVAILABLE_ICONS.map(iconName => ({ value: iconName, label: iconName, icon: iconName }))}
                   value={cat.icon}
                   onChange={(val) => handleUpdate(index, 'icon', val)}
                   isControlledOpen={activeSelectIndex === index}
@@ -210,3 +210,4 @@ export default function CategoryManager() {
     </div>
   );
 }
+

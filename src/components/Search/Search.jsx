@@ -106,8 +106,8 @@ export default function Search({ compact = false }) {
           value={searchQuery}
           onChange={handleInputChange}
           onFocus={() => searchQuery.trim().length > 0 && setIsOpen(true)}
-          placeholder="Search..."
-          className={`w-full ${compact ? 'pl-9 pr-8 py-2 rounded-xl text-sm' : 'pl-12 pr-10 py-3.5 rounded-2xl text-[16px]'} bg-slate-100/80 dark:bg-slate-800/80 backdrop-blur-md border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500 transition duration-300 shadow-inner`}
+          placeholder="स्थान, घाट, सेक्टर खोजें (Search)..."
+          className={`w-full ${compact ? 'pl-9 pr-8 py-2 rounded-xl text-sm' : 'pl-12 pr-10 py-3.5 rounded-2xl text-[16px]'} bg-slate-100/80 dark:bg-slate-800/80 backdrop-blur-md border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition duration-300 shadow-inner`}
         />
         {searchQuery.length > 0 && (
           <button

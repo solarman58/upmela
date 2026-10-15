@@ -62,7 +62,7 @@ export const useMapStore = create((set, get) => ({
   },
 
   // App Settings (Branding)
-  appSettings: { name: 'Airport Indoor Map', logo_url: null },
+  appSettings: { name: 'महाकुंभ मेला प्रयागराज', logo_url: '/maps/logo_1792058121026.png', project_type: 'Mela' },
 
   // Mode Selection
   isAdminMode: typeof window !== 'undefined' 
@@ -124,6 +124,9 @@ export const useMapStore = create((set, get) => ({
         const buildings = await res.json();
         if (buildings && buildings.length > 0) {
           set({ buildings });
+          if (!get().currentBuilding) {
+            set({ currentBuilding: buildings[0].id });
+          }
           return buildings;
         }
       }
@@ -136,6 +139,9 @@ export const useMapStore = create((set, get) => ({
       ? [{ id: 'bldg_default', name: 'Chennai Terminal 1' }] 
       : [];
     set({ buildings: fallbackBuildings });
+    if (fallbackBuildings.length > 0 && !get().currentBuilding) {
+      set({ currentBuilding: fallbackBuildings[0].id });
+    }
     return fallbackBuildings;
   },
 
@@ -221,6 +227,8 @@ export const useMapStore = create((set, get) => ({
   
   // Full Screen Mode
   isFullScreen: false,
+    isSectorModalOpen: false,
+    setIsSectorModalOpen: (open) => set({ isSectorModalOpen: !!open }),
   toggleFullScreen: () => set((state) => ({ isFullScreen: !state.isFullScreen })),
 
   // Indoor Positioning State
@@ -447,7 +455,7 @@ export const useMapStore = create((set, get) => ({
   deleteCustomRoute: () => {},
 
   // Theme
-  theme: localStorage.getItem('theme') || 'dark',
+  theme: (typeof window !== 'undefined' && localStorage.getItem('theme_user_set')) ? (localStorage.getItem('theme') || 'light') : 'light',
   toggleTheme: () => {
     const next = get().theme === 'dark' ? 'light' : 'dark';
     localStorage.setItem('theme', next);
@@ -584,7 +592,7 @@ export const useMapStore = create((set, get) => ({
 
   loadMapData: async (retries = 6) => {
     try {
-      let projectId = 'default';
+      let projectId = 'upmela';
       if (typeof window !== 'undefined') {
         const pathMatch = window.location.pathname.match(/^\/map\/([^/]+)/);
         if (pathMatch) {
@@ -612,7 +620,7 @@ export const useMapStore = create((set, get) => ({
       if (floorsRes.ok && graphRes.ok) {
         let floors = await floorsRes.json();
         const graph = await graphRes.json();
-        const settings = settingsRes.ok ? await settingsRes.json() : { name: 'Airport Indoor Map', logo_url: null };
+        const settings = settingsRes.ok ? await settingsRes.json() : { name: 'महाकुंभ मेला प्रयागराज', logo_url: '/maps/logo_1792058121026.png', project_type: 'Mela' };
         let categories = catRes.ok ? await catRes.json() : [];
         
         // Handle Service Worker offline fallback objects
@@ -623,14 +631,35 @@ export const useMapStore = create((set, get) => ({
         const edges = graph.edges || [];
         const computedPois = computePoisFromNodes(nodes);
         
-        let topFloorId = floors[0]?.id || null;
-        if (floors && floors.length > 0) {
-          const sorted = [...floors].sort((a, b) => {
-            const numA = parseInt(a.level.replace(/[^0-9]/g, '')) || 0;
-            const numB = parseInt(b.level.replace(/[^0-9]/g, '')) || 0;
-            return numA - numB;
-          });
-          topFloorId = sorted[sorted.length - 1].id;
+        let topFloorId = null;
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          const targetFloor = params.get('floor');
+          const targetSector = params.get('sector');
+          if (targetFloor) {
+            const f = floors.find(x => x.id === targetFloor || x.level === targetFloor);
+            if (f) topFloorId = f.id;
+          } else if (targetSector) {
+            const f = floors.find(x => {
+              const clean = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              return clean(x.name) === ('sector' + targetSector) || clean(x.level) === ('s' + targetSector);
+            });
+            if (f) topFloorId = f.id;
+          }
+        }
+        if (!topFloorId && floors && floors.length > 0) {
+          const isMela = settings.project_type === 'Mela' || settings.project_type === 'Kumbh Mela';
+          const mainFloor = floors.find(f => f.level === 'MAIN' || f.name.toLowerCase().includes('main') || f.name.toLowerCase().includes('overview'));
+          if ((isMela && mainFloor) || mainFloor) {
+            topFloorId = mainFloor.id;
+          } else {
+            const sorted = [...floors].sort((a, b) => {
+              const numA = parseInt(a.level.replace(/[^0-9]/g, '')) || 0;
+              const numB = parseInt(b.level.replace(/[^0-9]/g, '')) || 0;
+              return numA - numB;
+            });
+            topFloorId = sorted[sorted.length - 1].id;
+          }
         }
 
         set((state) => {

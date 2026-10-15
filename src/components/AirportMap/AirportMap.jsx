@@ -5,6 +5,7 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { useMapStore } from '../../store/useMapStore';
 import { getEffectiveEdges } from '../../utils/pathfinder';
 import { useIndoorPositioning } from '../../hooks/useIndoorPositioning';
+import { findMatchingSectorFloor } from '../../utils/melaUtils';
 import UserLocationMarker from './UserLocationMarker';
 import FloorSelector from '../FloorSelector/FloorSelector';
 
@@ -31,27 +32,24 @@ const getLabelLines = (name) => {
 };
 
 const getCategoryIcon = (category) => {
-  const map = {
-    gate: '✈️',
-    restaurant: '🍔',
-    food: '🍔',
-    cafe: '☕',
-    shopping: '🛍️',
-    atm: '💵',
-    washroom: '🚻',
-    lounge: '🛋️',
-    security: '🛡️',
-    immigration: '🛂',
-    medical: '🏥',
-    emergency: '🚨',
-    checkin: '🧳',
-    baggage: '🧳',
-    office: '💼',
-    lift: '🛗',
-    escalator: '🪜',
-    waypoint: '📍'
-  };
-  return map[category] || '📍';
+  if (!category) return '\u{1F4CD}';
+  const c = category.toLowerCase();
+  if (c.includes('ghat') || c.includes('snan')) return '\u{1F549}';
+  if (c.includes('akhara') || c.includes('camp') || c.includes('ashram') || c.includes('tent')) return '\u{26FA}';
+  if (c.includes('medical') || c.includes('hospital') || c.includes('icu') || c.includes('firstaid')) return '\u{1F3E5}';
+  if (c.includes('toilet') || c.includes('washroom') || c.includes('urinal') || c.includes('sanitation')) return '\u{1F6BD}';
+  if (c.includes('water') || c.includes('jal') || c.includes('peya')) return '\u{1F4A7}';
+  if (c.includes('police') || c.includes('khoya') || c.includes('security') || c.includes('thana')) return '\u{1F46E}';
+  if (c.includes('food') || c.includes('bhandara') || c.includes('langar') || c.includes('annakshetra') || c.includes('restaurant') || c.includes('cafe')) return '\u{1F372}';
+  if (c.includes('bridge') || c.includes('pontoon') || c.includes('pipa')) return '\u{1F309}';
+  if (c.includes('parking') || c.includes('bus') || c.includes('shuttle')) return '\u{1F17F}';
+  if (c.includes('temple') || c.includes('mandir') || c.includes('shrine')) return '\u{1F6D5}';
+  if (c.includes('shop') || c.includes('store') || c.includes('bazaar') || c.includes('plot') || c.includes('stall')) return '\u{1F6CD}';
+  if (c.includes('control') || c.includes('office') || c.includes('admin')) return '\u{1F3E2}';
+  if (c.includes('gate')) return '\u{1F6AA}';
+  if (c.includes('atm')) return '\u{1F3E7}';
+  if (c.includes('emergency')) return '\u{1F6A8}';
+  return '\u{1F4CD}';
 };
 
 export default function AirportMap() {
@@ -82,8 +80,12 @@ export default function AirportMap() {
     nodes, edges, dragNode, dragEdgeCurve, toggleEdge, isDrawingEdges, setIsDrawingEdges,
     selectedEdge, setSelectedEdge, setZoomActions,
     userPosition, categories,
-    isLoadingBuilding
+    isLoadingBuilding, appSettings
   } = useMapStore();
+
+  const isMela = appSettings?.project_type === 'Mela' || appSettings?.project_type === 'Kumbh Mela';
+  const currentFloorObj = floors?.find(f => f.id === currentFloor);
+  const isMainMelaFloor = currentFloorObj?.level === 'MAIN';
 
   const { isActive, error: ipsError, startTracking, stopTracking } = useIndoorPositioning();
 
@@ -237,7 +239,7 @@ export default function AirportMap() {
               <FiSettings className="w-6 h-6 text-sky-500 absolute animate-pulse" />
             </div>
             <div className="text-center">
-              <h2 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1 tracking-tight">Syncing Terminal Data</h2>
+              <h2 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1 tracking-tight">{appSettings?.project_type === 'Mela' || appSettings?.project_type === 'Kumbh Mela' ? 'मेला ग्राउंड लोड हो रहा है...' : 'Syncing Terminal Data'}</h2>
               <p className="text-xs font-bold text-slate-500">Loading maps and pathways...</p>
             </div>
           </div>
@@ -941,7 +943,7 @@ export default function AirportMap() {
                           <div className="bg-slate-900/80 backdrop-blur-md text-slate-300 px-8 py-6 rounded-3xl border border-slate-800 shadow-2xl flex flex-col items-center text-center max-w-sm">
                             <span className="text-5xl mb-4">🗺️</span>
                             <h2 className="text-2xl font-black text-white mb-2">Blank Canvas</h2>
-                            <p className="text-sm">There are no floors in this project yet. Open the <strong className="text-sky-400">Floor Manager</strong> in the sidebar to upload your first map image!</p>
+                            <p className="text-sm">There are no {isMela ? "sectors or maps" : "floors"} in this project yet. Open <strong className="text-sky-400">{isMela ? "Sectors" : "Floor Manager"}</strong> in the sidebar to upload your first map image!</p>
                           </div>
                         </div>
                       )}
@@ -1044,6 +1046,9 @@ export default function AirportMap() {
                           // Regular POI rendering
                           if (!isActive && !isSelected && !isStart && !isEnd && !taggingMode && !isDrawingEdges) return null;
 
+                          const matchedSectorFloor = isMainMelaFloor ? findMatchingSectorFloor(poi.name, floors) : null;
+                          const isSectorNode = isMainMelaFloor && (poi.name || '').toLowerCase().includes('sector');
+
                           const nameLines = getLabelLines(poi.name);
                           const maxLineLength = Math.max(...nameLines.map(line => line.length));
                           const boxWidth = Math.max(52, maxLineLength * 6.5 + 16);
@@ -1053,17 +1058,36 @@ export default function AirportMap() {
                             <g
                               key={poi.id}
                               transform={`translate(${poi.x}, ${poi.y})`}
-                              className="cursor-pointer pointer-events-auto"
+                              className={`cursor-pointer pointer-events-auto ${matchedSectorFloor ? 'group/sector' : ''}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 if (isDrawingEdges) {
                                   handleNodeEdgeClick(poi.id);
+                                } else if (isMainMelaFloor) {
+                                  if (taggingMode) {
+                                    // In admin tagging mode, select to edit pin details in sidebar
+                                    selectPoi(poi);
+                                  } else {
+                                    // Normal mode: NEVER open popup, only open linked sector map if linked
+                                    const targetFloorId = poi.targetFloor || poi.target_floor;
+                                    const targetFloor = targetFloorId 
+                                      ? floors?.find(f => f.id === targetFloorId)
+                                      : findMatchingSectorFloor(poi.name, floors);
+
+                                    if (targetFloor) {
+                                      useMapStore.getState().setFloor(targetFloor.id);
+                                      useMapStore.getState().addToast(`⛺ Opening ${targetFloor.name} Map...`, 'success');
+                                    } else {
+                                      useMapStore.getState().addToast(`⚠️ ${poi.name} kisi sector map se link nahi hai. Admin panel me ise link karein.`, 'info');
+                                    }
+                                  }
                                 } else {
                                   selectPoi(poi);
                                 }
                               }}
                               onMouseDown={(e) => handleNodeMouseDown(e, poi)}
                             >
+                              <title>{matchedSectorFloor ? `⛺ Click to open ${matchedSectorFloor.name} detailed map` : poi.name}</title>
                               {isEdgeStart && (
                                 <circle r="22" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeDasharray="3,3" className="animate-spin" style={{ animationDuration: '6s' }} />
                               )}
@@ -1156,6 +1180,9 @@ export default function AirportMap() {
                                     return (
                                       <>
                                         <g transform={`translate(0, ${-boxHeight / 2 + 8})`} className="drop-shadow-md">
+                                          {matchedSectorFloor && (
+                                            <circle r="18" fill="none" stroke="#10b981" strokeWidth="2.5" strokeDasharray="5,3" className="animate-spin" style={{ animationDuration: '8s' }} />
+                                          )}
                                           <circle r="13" fill={badgeBg} />
                                           <circle r="13" fill="none" stroke="#ffffff" strokeWidth="1.5" className="opacity-90" />
                                           {CustomIcon ? (
@@ -1184,6 +1211,7 @@ export default function AirportMap() {
                                               {line}
                                             </tspan>
                                           ))}
+                                          
                                         </text>
                                       </>
                                     );
@@ -1216,7 +1244,7 @@ export default function AirportMap() {
         );
       })()}
 
-      {/* ── Blocked Edge Hover Tooltip (HTML overlay, tracks mouse) ── */}
+      {/* Blocked Edge Hover Tooltip (HTML overlay, tracks mouse) ── */}
       {hoveredBlockedEdge && (
         <div
           className="fixed z-[9999] pointer-events-none"
@@ -1264,3 +1292,4 @@ export default function AirportMap() {
     </div>
   );
 }
+

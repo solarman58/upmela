@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import LoadingScreen from './components/LoadingScreen/LoadingScreen';
 import Sidebar from './components/Sidebar/Sidebar';
@@ -109,6 +109,43 @@ const MapLayout = () => {
       });
     }
   }, [floors, nodes, edges, pois, currentFloor, currentBuilding, dataLoaded]);
+
+  // URL-based Floor / Sector selection (One-time on load, cleanly clearing URL params)
+  const urlSectorProcessedRef = useRef(false);
+  useEffect(() => {
+    if (dataLoaded && floors.length > 0 && !urlSectorProcessedRef.current) {
+      const params = new URLSearchParams(window.location.search);
+      const floorParam = params.get('floor');
+      const sectorParam = params.get('sector');
+      
+      if (floorParam) {
+        urlSectorProcessedRef.current = true;
+        const target = floors.find(f => f.id === floorParam || f.level === floorParam);
+        if (target) {
+          useMapStore.getState().setFloor(target.id);
+        }
+        // Clean URL so floor switching & Back to Main Map button works seamlessly
+        const cleanUrl = new URL(window.location);
+        cleanUrl.searchParams.delete('floor');
+        cleanUrl.searchParams.delete('sector');
+        window.history.replaceState({}, '', cleanUrl);
+      } else if (sectorParam) {
+        urlSectorProcessedRef.current = true;
+        const clean = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const target = floors.find(f => {
+          return clean(f.name) === ('sector' + sectorParam) || clean(f.level) === ('s' + sectorParam);
+        });
+        if (target) {
+          useMapStore.getState().setFloor(target.id);
+        }
+        // Clean URL so floor switching & Back to Main Map button works seamlessly
+        const cleanUrl = new URL(window.location);
+        cleanUrl.searchParams.delete('sector');
+        cleanUrl.searchParams.delete('floor');
+        window.history.replaceState({}, '', cleanUrl);
+      }
+    }
+  }, [dataLoaded, floors]);
 
   // QR Code / URL-based Auto-Navigation
   useEffect(() => {
@@ -245,7 +282,8 @@ export default function App() {
       // Allow URL override for iframe demos
       const params = new URLSearchParams(window.location.search);
       const urlTheme = params.get('theme');
-      const activeTheme = urlTheme || localStorage.getItem('theme') || 'dark';
+      const isUserSet = localStorage.getItem('theme_user_set');
+      const activeTheme = urlTheme || (isUserSet ? localStorage.getItem('theme') : 'light') || 'light';
       
       document.documentElement.classList.toggle('dark', activeTheme === 'dark');
     } else {

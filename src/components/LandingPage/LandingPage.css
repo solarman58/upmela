@@ -1227,3 +1227,29 @@
 .anim-user-app {
   animation: popUserApp 10s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
 }
+
+
+.lp-brand-logo {
+  height: 44px;
+  width: auto;
+  max-width: 220px;
+  object-fit: contain;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.06));
+}
+.lp-navbar.scrolled .lp-brand-logo {
+  height: 36px;
+  max-width: 190px;
+}
+.lp-brand-logo-mobile {
+  height: 34px;
+  width: auto;
+  max-width: 170px;
+  object-fit: contain;
+}
+.lp-brand-logo-footer {
+  height: 38px;
+  width: auto;
+  max-width: 200px;
+  object-fit: contain;
+}

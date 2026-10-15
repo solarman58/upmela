@@ -12,7 +12,7 @@ import {
 
 const STATUSES = ['Open', 'Closed', 'Under Maintenance', 'Coming Soon'];
 
-const emptyForm = { name: '', category: 'gate', description: '', status: 'Open', imageFile: null, imagePreview: null, imageUrl: null };
+const emptyForm = { name: '', category: 'gate', description: '', status: 'Open', imageFile: null, imagePreview: null, imageUrl: null, targetFloor: '' };
 
 export default function TaggingPanel() {
   const {
@@ -21,9 +21,12 @@ export default function TaggingPanel() {
     setTaggingMode, setTaggingCoords, setEditingPoiId,
     addPoi, editPoi, deletePoi, exportFloorData, resetToDefaults,
     nodes, edges, isDrawingEdges, setIsDrawingEdges, selectedEdge, setSelectedEdge, updateEdge,
-    blockEdge, unblockEdge, categories,
+    blockEdge, unblockEdge, categories, floors, appSettings,
   } = useMapStore();
 
+  const isMela = appSettings?.project_type === 'Mela' || appSettings?.project_type === 'Kumbh Mela';
+  const currentFloorObj = floors?.find(f => f.id === currentFloor);
+  const isMainMelaFloor = isMela && currentFloorObj?.level === 'MAIN';
   const [form, setForm] = useState(emptyForm);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -56,6 +59,7 @@ export default function TaggingPanel() {
         imageUrl: editingPoi.imageUrl || null,
         imagePreview: editingPoi.imageUrl || null,
         imageFile: null,
+        targetFloor: editingPoi.targetFloor || editingPoi.target_floor || '',
       });
     } else {
       setForm({ ...emptyForm, category: categories?.[0]?.id || 'default' });
@@ -128,13 +132,14 @@ export default function TaggingPanel() {
         description: form.description,
         status: form.status,
         imageUrl: uploadedImageUrl,
+        targetFloor: form.targetFloor || null,
         ...(taggingCoords ? { x: taggingCoords.x, y: taggingCoords.y } : {}),
       });
       setEditingPoiId(null);
     } else {
       // Adding new POI — coords required
       if (!taggingCoords) return;
-      addPoi(currentFloor, { ...form, imageUrl: uploadedImageUrl, x: taggingCoords.x, y: taggingCoords.y });
+      addPoi(currentFloor, { ...form, imageUrl: uploadedImageUrl, targetFloor: form.targetFloor || null, x: taggingCoords.x, y: taggingCoords.y });
     }
     setForm(emptyForm);
     setSaved(true);
@@ -341,6 +346,33 @@ export default function TaggingPanel() {
                 </label>
               </div>
             </div>
+
+            {/* Sector Detailed Map Linking Option for Admin */}
+            {isMainMelaFloor && (
+              <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-500/30 flex flex-col gap-2">
+                <label className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                  <span className="text-sm">🗺️</span>
+                  <span>Link to Sector Detailed Map</span>
+                </label>
+                <select
+                  value={form.targetFloor || ''}
+                  onChange={e => setForm(f => ({ ...f, targetFloor: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-500/40 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-sm"
+                >
+                  <option value="">-- No Sector Map Linked --</option>
+                  {(floors || [])
+                    .filter(f => f.level !== 'MAIN')
+                    .map(f => (
+                      <option key={f.id} value={f.id}>
+                        ⛺ {f.name} ({f.level})
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[9.5px] text-slate-500 dark:text-slate-400 leading-tight">
+                  Jab koi user map par is pin par click karega to seedhe ye sector layout khulega.
+                </p>
+              </div>
+            )}
 
             {/* Status */}
             <div>

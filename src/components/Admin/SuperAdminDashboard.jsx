@@ -552,7 +552,9 @@ export default function SuperAdminDashboard() {
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Industry / Project Type</label>
                   <select value={projectType} onChange={e => setProjectType(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:border-sky-500 outline-none appearance-none">
-                    <option value="Airport">Airports</option>
+                    <option value="Mela">Mela & Fairs</option>
+                    <option value="Kumbh Mela">Mahakumbh & Riverfront Festivals</option>
+<option value="Airport">Airports</option>
                     <option value="Hospital">Hospitals & Healthcare</option>
                     <option value="Mall">Shopping Malls & Retail</option>
                     <option value="Corporate">Corporate Offices & IT Parks</option>
@@ -923,4 +925,5 @@ const StatCard = ({ icon, label, value, color, bg, border }) => (
     </div>
   </div>
 );
+
 

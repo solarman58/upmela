@@ -121,16 +121,8 @@ export default function Login() {
       >
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6" onClick={() => navigate('/')} style={{cursor: 'pointer'}}>
-            <div className="flex items-center gap-2">
-              <img src="/margyaan-icon.png" alt="Margyaan" className="w-[48px] h-[48px] object-contain mix-blend-multiply transition-all" />
-              <div className="flex flex-col items-start justify-center">
-                <div className="flex items-center text-[1.35rem] font-black tracking-[0.05em] leading-none">
-                  <span className="text-[#1E293B]">MAR</span>
-                  <span className="text-transparent bg-clip-text bg-gradient-to-br from-[#6D28D9] to-[#D946EF] text-[1.45em] mx-[2px] translate-y-[1px]">G</span>
-                  <span className="text-[#2563EB]">YAAN</span>
-                </div>
-                <span className="text-[0.55rem] font-extrabold tracking-[0.15em] text-[#475569] mt-[2px]">INDOOR NAVIGATION SYSTEM</span>
-              </div>
+            <div className="flex items-center justify-center">
+              <img src="/solarmannav-logo.png" alt="SolarMannav" className="h-14 w-auto object-contain drop-shadow-sm" />
             </div>
           </div>
           <p className="text-sm text-slate-500 font-medium mt-2">Sign in to manage your spaces and routes.</p>

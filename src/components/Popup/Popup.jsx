@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMapStore } from '../../store/useMapStore';
+import { findMatchingSectorFloor } from '../../utils/melaUtils';
 import { FiX, FiNavigation, FiMapPin, FiCheck, FiArrowRight, FiClock } from 'react-icons/fi';
 
 export default function Popup() {
@@ -8,12 +9,20 @@ export default function Popup() {
     selectedPoi, selectPoi, setNavigationMode,
     setNavigationStart, setNavigationEnd,
     navigationStart, navigationEnd,
-    navigationDistance
+    navigationDistance, appSettings, floors, currentFloor, setFloor
   } = useMapStore();
+
+  const isMela = appSettings?.project_type === 'Mela' || appSettings?.project_type === 'Kumbh Mela';
+  const currentFloorObj = floors?.find(f => f.id === currentFloor);
+  const isMainMelaFloor = isMela && currentFloorObj?.level === 'MAIN';
+  const matchedSector = isMela ? (
+    selectedPoi?.target_floor ? floors?.find(f => f.id === selectedPoi.target_floor) : findMatchingSectorFloor(selectedPoi?.name, floors)
+  ) : null;
+  const isSectorPin = isMela && (selectedPoi?.name || '').toLowerCase().includes('sector');
 
   const [flash, setFlash] = useState(null);
 
-  if (!selectedPoi) return null;
+  if (!selectedPoi || isMainMelaFloor) return null;
 
   const isFrom = navigationStart?.id === selectedPoi.id;
   const isTo   = navigationEnd?.id   === selectedPoi.id;
@@ -69,12 +78,12 @@ export default function Popup() {
         exit={{ opacity: 0, y: 24 }}
         transition={{ type: 'spring', damping: 26, stiffness: 300 }}
         className="md:hidden fixed z-50 left-3 right-3"
-        style={{ bottom: '72px' }}
+        style={{ bottom: 'calc(68px + env(safe-area-inset-bottom, 12px))' }}
       >
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl shadow-black/15 border border-slate-200/60 dark:border-slate-700/40 px-3 py-2.5 flex items-center gap-2.5">
           {/* Icon */}
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-base flex-shrink-0 shadow-md">
-            {{ gate:'✈️', restaurant:'🍽️', food:'🍽️', shopping:'🛍️', lounge:'🍷', washroom:'🚻', security:'🛡️', checkin:'🧳', baggage:'🛄' }[selectedPoi.category?.toLowerCase()] || '📍'}
+            {{ gate:'🚪', restaurant:'🍽️', food:'🍽️', shopping:'🛍️', lounge:'🍷', washroom:'🚻', security:'🛡️', checkin:'🧳', baggage:'🛄' }[selectedPoi.category?.toLowerCase()] || '📍'}
           </div>
           {/* Info */}
           <div className="min-w-0 flex-1">
@@ -89,7 +98,7 @@ export default function Popup() {
             >From</button>
             <button
               onClick={handleTo}
-              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-90 ${isTo ? 'bg-sky-500 text-white' : 'bg-sky-50 dark:bg-sky-950/30 text-sky-600 border border-sky-200/60 dark:border-sky-800/40'}`}
+              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-90 ${isTo ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md shadow-orange-500/25' : 'bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-sm'}`}
             >Go</button>
             <button
               onClick={() => selectPoi(null)}
@@ -169,6 +178,27 @@ export default function Popup() {
           )}
 
 
+
+          {matchedSector ? (
+            <button
+              onClick={() => {
+                setFloor(matchedSector.id);
+                selectPoi(null);
+              }}
+              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white font-black text-xs tracking-wider uppercase shadow-lg shadow-orange-500/25 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer border border-white/20"
+            >
+              <span className="text-base">⛺</span>
+              <span>Open {matchedSector.name} Detailed Map →</span>
+            </button>
+          ) : isSectorPin ? (
+            <div className="w-full p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 text-xs font-semibold flex items-center gap-2.5">
+              <span className="text-base">🗺️</span>
+              <div className="flex flex-col">
+                <span className="font-bold">{selectedPoi.name} map abhi add nahi hua hai</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">Sidebar &gt; Sectors me &quot;Add Sector&quot; se iska map upload karein</span>
+              </div>
+            </div>
+          ) : null}
 
           {/* ── Navigation buttons — pure CSS, no nested animation ── */}
           <div className="grid grid-cols-2 gap-2">

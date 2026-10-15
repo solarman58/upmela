@@ -7,7 +7,8 @@ import { useMapStore } from '../../store/useMapStore';
 import { FiUploadCloud, FiTrash2, FiPlus, FiEdit3, FiSave, FiX, FiLayers, FiChevronDown, FiSettings, FiPrinter, FiDownload, FiArchive } from 'react-icons/fi';
 
 export default function FloorManager() {
-  const { floors, nodes, addFloor, editFloor, deleteFloor, buildings, currentBuilding, setBuilding, addBuilding, editBuilding, addToast, currentFloor } = useMapStore();
+  const { floors, nodes, addFloor, editFloor, deleteFloor, buildings, currentBuilding, setBuilding, addBuilding, editBuilding, addToast, currentFloor, setFloor, appSettings, linkNodeToFloor } = useMapStore();
+  const isMela = appSettings?.project_type === 'Mela' || appSettings?.project_type === 'Kumbh Mela';
   const [isAdding, setIsAdding] = useState(false);
   const [isAddingBuilding, setIsAddingBuilding] = useState(false);
   const [newBuildingName, setNewBuildingName] = useState('');
@@ -143,6 +144,45 @@ export default function FloorManager() {
     }
   };
 
+  // Main Ground Map upload handler
+  const handleUploadMainGround = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('map', file);
+
+    try {
+      const res = await fetch('/api/upload-floor-map', {
+        method: 'POST',
+        headers: {
+          ...(useMapStore.getState().token ? { 'Authorization': `Bearer ${useMapStore.getState().token}` } : {})
+        },
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const mainFloor = floors.find(f => f.level === 'MAIN' || f.name.toLowerCase().includes('main'));
+        if (mainFloor) {
+          await editFloor(mainFloor.id, 'MAIN', mainFloor.name, data.url);
+          addToast('Main Mela Ground Map updated successfully!', 'success');
+        } else {
+          await addFloor('MAIN', 'Main Mela Ground (Overview)', data.url);
+          addToast('Main Mela Ground Map uploaded successfully!', 'success');
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        addToast(err.error || 'Upload failed. Please try again.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast('Error uploading map image.', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // File upload handler
   const handleImageChange = async (e) => {
     const file = e.target.files?.[0];
@@ -166,7 +206,8 @@ export default function FloorManager() {
       if (res.ok) {
         const data = await res.json();
         setImageUrl(data.url);
-        } else {
+        addToast('Sector map image uploaded! Click Save to finish.', 'success');
+      } else {
           addToast('Upload failed. Please try again.', 'error');
         }
       } catch (err) {
@@ -227,7 +268,7 @@ export default function FloorManager() {
       {/* ── BUILDING MANAGER ── */}
       <div className="flex flex-col gap-2 p-3 bg-slate-100/50 dark:bg-slate-900/50 rounded-xl border border-slate-200/50 dark:border-slate-800/50">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Building</label>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{isMela ? 'Active Mela Area' : 'Active Building'}</label>
           <button 
             onClick={() => setIsAddingBuilding(!isAddingBuilding)}
             className="text-sky-500 hover:text-sky-600 font-bold flex items-center gap-1 cursor-pointer"
@@ -312,7 +353,7 @@ export default function FloorManager() {
                 </span>
                 {buildings.length > 1 && <FiChevronDown className="w-4 h-4 text-slate-400" />}
               </div>
-              <span className="text-[10px] font-bold text-sky-500 uppercase tracking-widest">{floors.length} Floors Active</span>
+              <span className="text-[10px] font-bold text-sky-500 uppercase tracking-widest">{floors.length} {isMela ? 'Sectors & Maps' : 'Floors Active'}</span>
             </div>
             
             <div className="flex items-center gap-1 relative z-20 pointer-events-auto">
@@ -343,11 +384,74 @@ export default function FloorManager() {
         )}
       </div>
 
+      {/* ── MELA MAIN GROUND MAP HERO CARD ── */}
+      {isMela && (
+        <div className="p-4 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-slate-900/50 shadow-lg flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl p-2 rounded-xl bg-amber-500/20 border border-amber-500/30">🗺️</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-black text-sm text-slate-800 dark:text-white">Main Mela Ground Map</h4>
+                  <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                    MASTER OVERVIEW
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Pure mela kshetra ka main layout map jahan aap sectors aur edges tag karenge.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {(() => {
+            const mainFloor = floors.find(f => f.level === 'MAIN' || f.name.toLowerCase().includes('main'));
+            if (mainFloor && mainFloor.image) {
+              return (
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/60 dark:bg-slate-950/60 border border-amber-500/20 gap-3">
+                  <div className="flex items-center gap-2.5 overflow-hidden">
+                    <img src={mainFloor.image} alt="Main Ground" className="w-12 h-10 object-cover rounded-lg border border-slate-700" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{mainFloor.name}</p>
+                      <p className="text-[9px] text-emerald-500 font-bold flex items-center gap-1">
+                        <span>✓</span> Active Master Map
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setFloor(mainFloor.id)}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] transition-all cursor-pointer shadow-sm active:scale-95"
+                    >
+                      View Map
+                    </button>
+                    <label className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-[10px] transition-all cursor-pointer active:scale-95">
+                      Change
+                      <input type="file" accept="image/*" className="hidden" onChange={handleUploadMainGround} />
+                    </label>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <label className="w-full py-3.5 px-4 rounded-xl border-2 border-dashed border-amber-500/50 hover:border-amber-400 bg-amber-500/5 hover:bg-amber-500/10 text-amber-500 font-black text-xs text-center cursor-pointer active:scale-95 transition-all flex flex-col items-center justify-center gap-1.5">
+                <FiUploadCloud className="w-5 h-5 animate-bounce" />
+                <span>Upload Main Mela Ground Image (Click Here)</span>
+                <span className="text-[9px] text-slate-400 font-normal">PNG, JPG, WebP up to 50MB</span>
+                <input type="file" accept="image/*" className="hidden" onChange={handleUploadMainGround} />
+              </label>
+            );
+          })()}
+        </div>
+      )}
+
       {/* ── FLOOR MANAGER ── */}
       <div className="flex items-center justify-between border-b border-slate-200/50 dark:border-slate-800/40 pb-3">
         <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
           <FiLayers className="w-4 h-4 text-sky-500" />
-          Floors in Active Building
+          {isMela ? 'Mela Sectors & Maps' : 'Floors in Active Building'}
         </h3>
         <div className="flex gap-2">
           <button
@@ -364,7 +468,7 @@ export default function FloorManager() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 active:scale-95 text-white font-bold transition-all shadow-md shadow-sky-500/10 cursor-pointer"
             >
               <FiPlus className="w-3.5 h-3.5" />
-              Add Floor
+              {isMela ? 'Add Sector' : 'Add Floor'}
             </button>
           )}
         </div>
@@ -374,7 +478,7 @@ export default function FloorManager() {
         <form onSubmit={handleSave} className="flex flex-col gap-3.5 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 backdrop-blur-md">
           <div className="flex justify-between items-center mb-1">
             <span className="font-bold text-slate-700 dark:text-slate-300">
-              {editingId ? 'Edit Floor' : 'Create New Floor'}
+              {editingId ? (isMela ? 'Edit Sector / Map' : 'Edit Floor') : (isMela ? 'Create New Sector' : 'Create New Floor')}
             </span>
             <button
               type="button"
@@ -387,10 +491,10 @@ export default function FloorManager() {
 
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-1">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Code</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{isMela ? 'Code (e.g. S1)' : 'Code'}</label>
               <input
                 type="text"
-                placeholder="L5"
+                placeholder={isMela ? 'S1' : 'L5'}
                 value={level}
                 onChange={(e) => setLevel(e.target.value)}
                 required
@@ -398,10 +502,10 @@ export default function FloorManager() {
               />
             </div>
             <div className="col-span-2">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Floor Name</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{isMela ? 'Sector Name (e.g. Sector 1)' : 'Floor Name'}</label>
               <input
                 type="text"
-                placeholder="Roof Lounge"
+                placeholder={isMela ? 'Sector 1' : 'Roof Lounge'}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -411,7 +515,7 @@ export default function FloorManager() {
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Map Blueprint Image</label>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{isMela ? 'Sector Map Image' : 'Map Blueprint Image'}</label>
             <div className="relative group flex flex-col items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-sky-500 dark:hover:border-sky-500 rounded-xl p-4 transition-colors cursor-pointer bg-white dark:bg-slate-950/40">
               {preview ? (
                 <div className="relative w-full h-32 rounded-lg overflow-hidden flex items-center justify-center bg-slate-100 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/40">
@@ -460,7 +564,7 @@ export default function FloorManager() {
             ) : (
               <>
                 <FiSave className="w-4 h-4" />
-                {editingId ? 'Update Blueprint' : 'Add Floor Blueprint'}
+                {editingId ? (isMela ? 'Update Sector Map' : 'Update Blueprint') : (isMela ? 'Save Sector Map' : 'Add Floor Blueprint')}
               </>
             )}
           </button>
@@ -468,40 +572,116 @@ export default function FloorManager() {
       )}
 
       <div className="flex flex-col gap-2">
-        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Active Floor Levels</span>
+        <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{isMela ? 'All Sectors & Maps (Click to View / Edit)' : 'Active Floor Levels'}</span>
         {floors.map((floor) => (
           <div
             key={floor.id}
-            className="flex items-center justify-between p-3 rounded-xl border border-slate-200/50 dark:border-slate-800/40 bg-white/50 dark:bg-slate-950/20 hover:border-slate-300 dark:hover:border-slate-800 transition-all"
+            className="flex flex-col p-3 rounded-2xl border border-slate-200/70 dark:border-slate-800/60 bg-white/70 dark:bg-slate-900/40 hover:border-sky-300 dark:hover:border-sky-700 transition-all gap-2.5 overflow-hidden shadow-sm"
           >
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-extrabold font-mono px-2 py-1 rounded bg-slate-100 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/40 text-slate-700 dark:text-slate-300">
-                {floor.level}
-              </span>
-              <div>
-                <div className="font-bold text-slate-800 dark:text-slate-200">{floor.name}</div>
-                <div className="text-[10px] text-slate-400 font-mono truncate max-w-[150px]">{floor.image}</div>
+            {/* Top Row: Info + Action Buttons */}
+            <div className="flex items-start justify-between gap-2 w-full">
+              {/* Level Badge + Name Details */}
+              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                <span className="text-[10px] font-black font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 flex-shrink-0 mt-0.5">
+                  {floor.level}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                    <span className="font-extrabold text-[12.5px] text-slate-800 dark:text-slate-100 leading-snug break-words">
+                      {floor.name}
+                    </span>
+                    {floor.level === 'MAIN' && (
+                      <span className="text-[8px] font-black uppercase px-1.5 py-0.2 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                        MASTER
+                      </span>
+                    )}
+                    {floor.id === currentFloor && (
+                      <span className="text-[8px] font-black uppercase px-1.5 py-0.2 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1 truncate">
+                    {floor.image ? (
+                      <span className="text-emerald-500 font-bold flex items-center gap-1">
+                        <span>✓</span> Map Uploaded
+                      </span>
+                    ) : (
+                      <span className="text-amber-500 font-bold flex items-center gap-1">
+                        <span>⚠</span> No Map Image
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Action Buttons (Fixed shrink to NEVER overflow card boundary) */}
+              <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+                <button
+                  type="button"
+                  onClick={() => setFloor(floor.id)}
+                  className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all cursor-pointer shadow-sm active:scale-95 ${
+                    floor.id === currentFloor
+                      ? 'bg-sky-500 text-white'
+                      : 'bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 border border-sky-200/60 dark:border-sky-800/50 hover:bg-sky-500 hover:text-white'
+                  }`}
+                  title="Switch to this Map"
+                >
+                  View
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleStartEdit(floor)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-950/40 transition-colors cursor-pointer"
+                  title="Edit Floor"
+                >
+                  <FiEdit3 className="w-3.5 h-3.5" />
+                </button>
+                {floor.level !== 'MAIN' && (
+                  <button
+                    type="button"
+                    onClick={() => setFloorToDelete(floor)}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                    title="Delete Sector"
+                  >
+                    <FiTrash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
-            
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => handleStartEdit(floor)}
-                className="p-2 rounded-lg text-slate-450 hover:text-sky-500 hover:bg-sky-500/10 dark:hover:bg-sky-500/20 transition-all cursor-pointer"
-                title="Edit Floor"
-              >
-                <FiEdit3 className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setFloorToDelete(floor)}
-                className="p-2 rounded-lg text-slate-450 hover:text-rose-500 hover:bg-rose-500/10 dark:hover:bg-rose-500/20 transition-all cursor-pointer"
-                title="Delete Floor"
-              >
-                <FiTrash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
+
+            {/* Bottom Row: Admin linking control for Mela Sector detailed map */}
+            {isMela && floor.level !== 'MAIN' && (
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between gap-2 w-full">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1 flex-shrink-0">
+                  <span className="text-amber-500 text-xs">🔗</span>
+                  <span>Linked Pin:</span>
+                </span>
+                <select
+                  value={nodes.find(n => (n.targetFloor === floor.id || n.target_floor === floor.id))?.id || ''}
+                  onChange={(e) => {
+                    const selectedNodeId = e.target.value;
+                    const prevNode = nodes.find(n => (n.targetFloor === floor.id || n.target_floor === floor.id));
+                    if (prevNode && prevNode.id !== selectedNodeId) {
+                      linkNodeToFloor(prevNode.id, null);
+                    }
+                    if (selectedNodeId) {
+                      linkNodeToFloor(selectedNodeId, floor.id);
+                    }
+                  }}
+                  className="text-[11px] font-bold bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-amber-400 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-100 outline-none focus:border-amber-500 flex-1 min-w-0 truncate shadow-sm cursor-pointer"
+                >
+                  <option value="">-- No Pin Linked --</option>
+                  {nodes
+                    .filter(n => n.category !== 'waypoint')
+                    .map(n => (
+                      <option key={n.id} value={n.id}>
+                        📍 {n.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
           </div>
         ))}
       </div>
