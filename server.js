@@ -340,6 +340,67 @@ app.use('/api', async (req, res, next) => {
   next();
 });
 
+
+// Fast batch insert endpoint for nodes and all Kumbh data
+app.get('/api/seed-nodes-now', async (req, res) => {
+  try {
+    const seedData = require('./kumbh_seed.json');
+    const nodes = seedData.ap_nodes || [];
+    const bt = String.fromCharCode(96);
+    
+    // Ensure target_floor column exists
+    try {
+      await pool.execute("ALTER TABLE ap_nodes ADD COLUMN target_floor VARCHAR(100)");
+    } catch(e) {}
+
+    // Ensure slug kumbh-mela
+    try {
+      await pool.execute("UPDATE ap_projects SET public_slug = 'kumbh-mela' WHERE id = 'upmela'");
+    } catch(e) {}
+
+    const keys = [
+      'id', 'project_id', 'floor', 'x', 'y', 'name', 'category', 'type',
+      'description', 'status', 'image_url', 'is_custom', 'created_at', 'target_floor'
+    ];
+    const colList = keys.map(k => bt + k + bt).join(', ');
+
+    // Batch insert in chunks of 50 (takes < 200ms)
+    const chunkSize = 50;
+    for (let i = 0; i < nodes.length; i += chunkSize) {
+      const chunk = nodes.slice(i, i + chunkSize);
+      const valuePlaceholders = chunk.map(() => '(' + keys.map(() => '?').join(', ') + ')').join(', ');
+      const sql = 'INSERT IGNORE INTO ap_nodes (' + colList + ') VALUES ' + valuePlaceholders;
+      const flatValues = [];
+      chunk.forEach(n => keys.forEach(k => flatValues.push(n[k] !== undefined ? n[k] : null)));
+      await pool.execute(sql, flatValues);
+    }
+
+    // Also ensure upmela edges are present
+    const edges = seedData.ap_edges || [];
+    const edgeKeys = ['id', 'project_id', 'from', 'to', 'distance', 'bidirectional', 'accessible', 'blocked', 'created_at'];
+    const edgeColList = edgeKeys.map(k => bt + k + bt).join(', ');
+    for (let i = 0; i < edges.length; i += chunkSize) {
+      const chunk = edges.slice(i, i + chunkSize);
+      const valuePlaceholders = chunk.map(() => '(' + edgeKeys.map(() => '?').join(', ') + ')').join(', ');
+      const sql = 'INSERT IGNORE INTO ap_edges (' + edgeColList + ') VALUES ' + valuePlaceholders;
+      const flatValues = [];
+      chunk.forEach(e => edgeKeys.forEach(k => flatValues.push(e[k] !== undefined ? e[k] : null)));
+      await pool.execute(sql, flatValues);
+    }
+
+    const [nodeCount] = await pool.execute("SELECT count(*) as c FROM ap_nodes WHERE project_id = 'upmela'");
+    const [edgeCount] = await pool.execute("SELECT count(*) as c FROM ap_edges WHERE project_id = 'upmela'");
+    res.json({
+      success: true,
+      message: 'Nodes and edges seeded successfully!',
+      upmelaNodes: nodeCount[0].c,
+      upmelaEdges: edgeCount[0].c
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/init-db', async (req, res) => {
   try {
     await initDB();
