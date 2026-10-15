@@ -1277,6 +1277,46 @@ app.post('/api/save-buildings', verifyToken, async (req, res) => {
 });
 
 // ── FLOORS ─────────────────────────────────────────────────────────────────────
+
+// Restore full Kumbh dataset into new TiDB database securely
+app.post('/api/restore-full-kumbh', async (req, res) => {
+  try {
+    const { secret, data } = req.body;
+    if (secret !== 'kumbh_mela_sacred_restore_2026') {
+      return res.status(403).json({ error: 'Unauthorized restore key' });
+    }
+    if (!data) return res.status(400).json({ error: 'No data provided' });
+    const conn = await pool.getConnection();
+    try {
+      const summary = {};
+      const bt = String.fromCharCode(96);
+      for (const [table, rows] of Object.entries(data)) {
+        if (!rows || rows.length === 0) continue;
+        let inserted = 0;
+        for (const row of rows) {
+          const keys = Object.keys(row);
+          const values = Object.values(row);
+          const placeholders = keys.map(() => '?').join(', ');
+          const colList = keys.map(k => bt + k + bt).join(', ');
+          const sql = 'INSERT IGNORE INTO ' + table + ' (' + colList + ') VALUES (' + placeholders + ')'; 
+          try {
+            await conn.execute(sql, values);
+            inserted++;
+          } catch (e) {
+            console.error('Row insert error in table ' + table + ':', e.message);
+          }
+        }
+        summary[table] = inserted;
+      }
+      res.json({ success: true, summary });
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Seed all 22 sectors for Kumbh Mela
 app.get('/api/seed-sectors', async (req, res) => {
   try {
