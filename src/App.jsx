@@ -305,6 +305,8 @@ export default function App() {
         <Route path="/terms" element={<LandingPage page="terms" />} />
         <Route path="/support" element={<LandingPage page="support" />} />
         <Route path="/app" element={<MapLayout />} />
+        <Route path="/kumbh-mela" element={<MapLayout />} />
+        <Route path="/kumbh-mela/*" element={<MapLayout />} />
         <Route path="/map/:slug" element={<MapLayout />} />
         <Route
           path="/login"

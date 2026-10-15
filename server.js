@@ -274,12 +274,15 @@ async function initDB() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
+    try {
+      await conn.execute("UPDATE ap_projects SET public_slug = 'kumbh-mela' WHERE id = 'upmela'");
+    } catch(e) {}
     console.log('✅ Prefixed MySQL tables ready (Multi-Tenant)');
   } finally {
     
     // Auto-seed Kumbh Mela dataset if ap_floors is empty
     try {
-      const [flrRows] = await conn.execute("SELECT count(*) as c FROM ap_floors WHERE project_id = 'upmela'");
+      const [flrRows] = await conn.execute("SELECT count(*) as c FROM ap_nodes WHERE project_id = 'upmela'");
       if (flrRows[0].c === 0) {
         const seedPath = path.join(__dirname, 'kumbh_seed.json');
         if (fs.existsSync(seedPath)) {

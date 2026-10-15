@@ -594,7 +594,11 @@ export const useMapStore = create((set, get) => ({
     try {
       let projectId = 'upmela';
       if (typeof window !== 'undefined') {
-        const pathMatch = window.location.pathname.match(/^\/map\/([^/]+)/);
+        const path = window.location.pathname;
+        if (path === '/kumbh-mela' || path.startsWith('/kumbh-mela')) {
+          projectId = 'upmela';
+        }
+        const pathMatch = path.match(/^\/map\/([^/]+)/);
         if (pathMatch) {
           projectId = pathMatch[1];
         } else {

@@ -5,3 +5,5 @@ dist/
 backup_upmela_data.json
 
 kumbh_restore_complete.sql
+
+*.sql
