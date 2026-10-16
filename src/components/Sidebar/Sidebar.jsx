@@ -19,14 +19,16 @@ import {
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 
 // Helper for dynamic naming
-const getBuildingType = (name = '') => {
+const getBuildingType = (name = '', isMela = false) => {
+  if (isMela) return 'Sector';
   const n = name.toLowerCase();
+  if (n.includes('mela') || n.includes('kumbh')) return 'Sector';
   if (n.includes('mall')) return 'Mall';
   if (n.includes('hospital') || n.includes('clinic')) return 'Hospital';
   if (n.includes('campus') || n.includes('university')) return 'Campus';
   if (n.includes('terminal') || n.includes('airport')) return 'Terminal';
   if (n.includes('station')) return 'Station';
-  return 'Building';
+  return 'Area';
 };
 
 export default function Sidebar() {
@@ -188,7 +190,7 @@ export default function Sidebar() {
       return [{ type: 'end', text: 'Walk directly to your destination.', icon: <FiCheck /> }];
     }
 
-    steps.push({ type: 'start', text: `Start at ${navigationStart.name}`, desc: `${capitalize(navigationStart.floor)} Level`, icon: <FiMapPin /> });
+    steps.push({ type: 'start', text: `Start at ${navigationStart.name}`, desc: isMela ? (floors.find(f => f.id === navigationStart.floor)?.name || 'Mela Ground') : `${capitalize(navigationStart.floor)} Level`, icon: <FiMapPin /> });
 
     let currentFloorName = navigationStart.floor;
 
@@ -208,7 +210,7 @@ export default function Sidebar() {
         steps.push({
           type: 'elevator',
           text: `Take the ${curr.name || curr.category}`,
-          desc: `To floor ${capitalize(next.floor)}`,
+          desc: isMela ? `To ${floors.find(f => f.id === next.floor)?.name || 'Next Sector'}` : `To floor ${capitalize(next.floor)}`,
           icon: <FiTrendingUp />,
           action: { type: 'switch_floor', floor: next.floor }
         });
@@ -282,8 +284,8 @@ export default function Sidebar() {
           {activeCategory === null ? (
             // ── DASHBOARD VIEW ────────────────────────────────────────────────
             <>
-              {/* Terminal / Building Switcher */}
-              {buildings?.length > 0 && (
+              {/* Terminal / Building Switcher (Hidden in Mela since Mela has sectors, not buildings) */}
+              {!isMela && buildings?.length > 1 && (
                 <div className="flex flex-col gap-2.5 mb-1 mt-1">
                   <div className="flex items-center justify-between px-1">
                     <h2 className="text-[11px] font-black tracking-widest uppercase text-slate-500 dark:text-slate-400">
@@ -534,7 +536,7 @@ export default function Sidebar() {
                               
                               <div className="flex-1 min-w-0">
                                 <p className="text-[13px] font-black text-slate-800 dark:text-slate-100 truncate">{poi.name}</p>
-                                <p className="text-[10px] font-bold text-slate-500 truncate mt-0.5">{poi.description || `${useMapStore.getState().floors.find(f => f.id === poi.floor)?.name || 'Unknown Floor'}`}</p>
+                                <p className="text-[10px] font-bold text-slate-500 truncate mt-0.5">{poi.description || `${useMapStore.getState().floors.find(f => f.id === poi.floor)?.name || (isMela ? 'Sector' : 'Unknown Floor')}`}</p>
                               </div>
                               
                               <div className="flex flex-col items-end gap-1">
@@ -707,7 +709,7 @@ export default function Sidebar() {
                                   const entry = np?.find(pt => pt.floor === step.action.floor);
                                   if (entry) setTimeout(() => zmt(entry.x, entry.y, 3.5), 200);
                                 }} className="mt-1.5 bg-sky-500/10 hover:bg-sky-500 text-sky-600 hover:text-white dark:text-sky-400 border border-sky-300/50 dark:border-sky-800/50 px-3 py-1.5 rounded-xl text-[10px] font-extrabold uppercase tracking-wider w-fit transition-all active:scale-95">
-                                  Go to {capitalize(step.action.floor)} ➔
+                                  Go to {isMela ? (floors.find(f => f.id === step.action.floor)?.name || 'Sector') : capitalize(step.action.floor)} ➔
                                 </button>
                               )}
                             </div>
@@ -777,7 +779,7 @@ export default function Sidebar() {
       { id: 'explore', label: 'Explore', emoji: '🔍', color: 'sky', action: () => { setActiveTab('explore'); setIsOpen(prev => activeTab === 'explore' ? !prev : true); setNavigationMode(false); } },
       { id: 'navigate', label: 'Navigate', emoji: '🧭', color: 'indigo', action: () => { setActiveTab('navigate'); setIsOpen(prev => activeTab === 'navigate' ? !prev : true); setNavigationMode(true); } },
       { id: 'map', label: 'Map', emoji: '🗺️', color: 'emerald', action: () => setIsOpen(false) },
-      ...(isAdminMode ? [{ id: 'floors', label: 'Floors', emoji: '🏢', color: 'violet', action: () => { setActiveTab('floors'); setIsOpen(prev => activeTab === 'floors' ? !prev : true); setNavigationMode(false); } }] : []),
+      ...(isAdminMode ? [{ id: 'floors', label: isMela ? 'Sectors' : 'Floors', emoji: isMela ? '⛺' : '🏢', color: 'violet', action: () => { setActiveTab('floors'); setIsOpen(prev => activeTab === 'floors' ? !prev : true); setNavigationMode(false); } }] : []),
       ...(isAdminMode ? [{ id: 'tagging', label: 'Admin', emoji: '⚙️', color: 'rose', action: () => { setActiveTab('tagging'); setIsOpen(prev => activeTab === 'tagging' ? !prev : true); setNavigationMode(false); } }] : []),
       ...(isAdminMode ? [{ id: 'profile', label: 'Profile', emoji: '👤', color: 'slate', action: () => { setActiveTab('profile'); setIsOpen(prev => activeTab === 'profile' ? !prev : true); setNavigationMode(false); } }] : []),
     ];

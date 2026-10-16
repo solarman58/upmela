@@ -72,16 +72,16 @@ export default function FloorManager() {
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(14);
         doc.setFont(undefined, 'bold');
-        doc.text('MARGYAAN', centerX, 11, { align: 'center' });
+        doc.text(isMela ? 'KUMBH MELA' : 'MARGYAAN', centerX, 11, { align: 'center' });
 
         doc.setFontSize(9);
         doc.setFont(undefined, 'normal');
-        doc.text('Scan & Navigate — Indoor Navigation System', centerX, 19, { align: 'center' });
+        doc.text(isMela ? 'Scan & Navigate — Mela Guide' : 'Scan & Navigate — Indoor Navigation System', centerX, 19, { align: 'center' });
 
         // Floor label
         doc.setTextColor(100, 116, 139); // slate-500
         doc.setFontSize(9);
-        doc.text(`Floor: ${floorName}`, centerX, 38, { align: 'center' });
+        doc.text(isMela ? `Sector: ${floorName}` : `Floor: ${floorName}`, centerX, 38, { align: 'center' });
 
         // Node name
         doc.setTextColor(15, 23, 42); // slate-900
@@ -221,7 +221,7 @@ export default function FloorManager() {
   const handleSave = async (e) => {
     e.preventDefault();
     if (!level.trim() || !name.trim()) {
-      addToast("Level code and Floor name are required", "error");
+      addToast(isMela ? "Sector code and name are required" : "Level code and Floor name are required", "error");
       return;
     }
     
@@ -229,10 +229,10 @@ export default function FloorManager() {
     try {
       if (editingId) {
         await editFloor(editingId, level, name, imageUrl);
-        addToast(`Updated floor ${level} successfully`, "success");
+        addToast(isMela ? `Updated sector ${level} successfully` : `Updated floor ${level} successfully`, "success");
       } else {
         await addFloor(level, name, imageUrl);
-        addToast(`Added new floor ${level}`, "success");
+        addToast(isMela ? `Added new sector ${level}` : `Added new floor ${level}`, "success");
       }
       setIsAdding(false);
       setEditingId(null);
@@ -265,124 +265,145 @@ export default function FloorManager() {
 
   return (
     <div className="flex flex-col gap-4 text-xs">
-      {/* ── BUILDING MANAGER ── */}
-      <div className="flex flex-col gap-2 p-3 bg-slate-100/50 dark:bg-slate-900/50 rounded-xl border border-slate-200/50 dark:border-slate-800/50">
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{isMela ? 'Active Mela Area' : 'Active Building'}</label>
-          <button 
-            onClick={() => setIsAddingBuilding(!isAddingBuilding)}
-            className="text-sky-500 hover:text-sky-600 font-bold flex items-center gap-1 cursor-pointer"
-          >
-            {isAddingBuilding ? <FiX className="w-3 h-3" /> : <FiPlus className="w-3 h-3" />}
-            {isAddingBuilding ? 'Cancel' : 'New'}
-          </button>
+      {/* ── MELA KSHTRA / BUILDING MANAGER ── */}
+      {isMela ? (
+        <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 rounded-2xl border border-amber-500/20 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-base shadow-md shadow-orange-500/20">
+              ⛺
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[9.5px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                महाकुंभ मेला क्षेत्र
+              </span>
+              <span className="text-sm font-black text-slate-800 dark:text-white">
+                {buildings.find(b => b.id === currentBuilding)?.name || 'Kumbh Mela Grounds'}
+              </span>
+            </div>
+          </div>
+          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-500 text-white shadow-sm">
+            {floors.length} {floors.length === 1 ? 'Sector' : 'Sectors & Maps'}
+          </span>
         </div>
-
-        {isAddingBuilding ? (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="e.g. Terminal 2"
-              value={newBuildingName}
-              onChange={(e) => setNewBuildingName(e.target.value)}
-              className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 outline-none focus:border-sky-500 text-[16px]"
-            />
-            <button
-              onClick={() => {
-                if(newBuildingName.trim()){
-                  addBuilding(newBuildingName.trim(), '');
-                  setNewBuildingName('');
-                  setIsAddingBuilding(false);
-                }
-              }}
-              className="bg-sky-500 text-white px-3 rounded-lg font-bold hover:bg-sky-600 cursor-pointer"
+      ) : (
+        <div className="flex flex-col gap-2 p-3 bg-slate-100/50 dark:bg-slate-900/50 rounded-xl border border-slate-200/50 dark:border-slate-800/50">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Building</label>
+            <button 
+              onClick={() => setIsAddingBuilding(!isAddingBuilding)}
+              className="text-sky-500 hover:text-sky-600 font-bold flex items-center gap-1 cursor-pointer"
             >
-              Add
+              {isAddingBuilding ? <FiX className="w-3 h-3" /> : <FiPlus className="w-3 h-3" />}
+              {isAddingBuilding ? 'Cancel' : 'New'}
             </button>
           </div>
-        ) : isEditingBuilding ? (
-          <div className="flex flex-col gap-2 p-3 bg-white dark:bg-slate-800 rounded-xl border border-sky-500 shadow-[0_0_20px_rgba(14,165,233,0.15)] relative transition-all">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-black text-sky-500 uppercase tracking-widest flex items-center gap-1.5">
-                <FiEdit3 className="w-3 h-3" /> Rename Building
-              </span>
-              <button onClick={() => setIsEditingBuilding(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-1 bg-slate-100 dark:bg-slate-700/50 rounded-full active:scale-90 transition-all">
-                <FiX className="w-3 h-3" />
-              </button>
-            </div>
+
+          {isAddingBuilding ? (
             <div className="flex gap-2">
               <input
                 type="text"
-                value={editBuildingName}
-                onChange={(e) => setEditBuildingName(e.target.value)}
-                autoFocus
-                placeholder="Terminal Name"
-                className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-[14px] font-black text-slate-800 dark:text-white transition-all shadow-inner"
+                placeholder="e.g. Terminal 2"
+                value={newBuildingName}
+                onChange={(e) => setNewBuildingName(e.target.value)}
+                className="flex-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 outline-none focus:border-sky-500 text-[16px]"
               />
               <button
                 onClick={() => {
-                  if(editBuildingName.trim()){
-                    editBuilding(currentBuilding, editBuildingName.trim());
-                    setIsEditingBuilding(false);
+                  if(newBuildingName.trim()){
+                    addBuilding(newBuildingName.trim(), '');
+                    setNewBuildingName('');
+                    setIsAddingBuilding(false);
                   }
                 }}
-                className="bg-sky-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-sky-600 cursor-pointer active:scale-95 transition-all flex flex-shrink-0 items-center justify-center gap-2 shadow-md shadow-sky-500/20"
+                className="bg-sky-500 text-white px-3 rounded-lg font-bold hover:bg-sky-600 cursor-pointer"
               >
-                <FiSave className="w-4 h-4" /> <span className="hidden sm:inline">Save</span>
+                Add
               </button>
             </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-xl shadow-sm relative hover:border-sky-300 dark:hover:border-sky-700 transition-colors">
-            {buildings.length > 1 && (
-              <select 
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                value={currentBuilding || ''}
-                onChange={(e) => setBuilding(e.target.value)}
-              >
-                {buildings.map(b => (
-                  <option key={b.id} value={b.id} className="text-slate-800">{b.name}</option>
-                ))}
-              </select>
-            )}
-            
-            <div className="flex flex-col flex-1 relative pointer-events-none pr-2">
-              <div className="flex items-center gap-1.5">
-                <span className="text-base font-black text-slate-800 dark:text-slate-100">
-                  {buildings.find(b => b.id === currentBuilding)?.name || 'Unknown Building'}
+          ) : isEditingBuilding ? (
+            <div className="flex flex-col gap-2 p-3 bg-white dark:bg-slate-800 rounded-xl border border-sky-500 shadow-[0_0_20px_rgba(14,165,233,0.15)] relative transition-all">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-black text-sky-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <FiEdit3 className="w-3 h-3" /> Rename Building
                 </span>
-                {buildings.length > 1 && <FiChevronDown className="w-4 h-4 text-slate-400" />}
+                <button onClick={() => setIsEditingBuilding(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 p-1 bg-slate-100 dark:bg-slate-700/50 rounded-full active:scale-90 transition-all">
+                  <FiX className="w-3 h-3" />
+                </button>
               </div>
-              <span className="text-[10px] font-bold text-sky-500 uppercase tracking-widest">{floors.length} {isMela ? 'Sectors & Maps' : 'Floors Active'}</span>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={editBuildingName}
+                  onChange={(e) => setEditBuildingName(e.target.value)}
+                  autoFocus
+                  placeholder="Terminal Name"
+                  className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-[14px] font-black text-slate-800 dark:text-white transition-all shadow-inner"
+                />
+                <button
+                  onClick={() => {
+                    if(editBuildingName.trim()){
+                      editBuilding(currentBuilding, editBuildingName.trim());
+                      setIsEditingBuilding(false);
+                    }
+                  }}
+                  className="bg-sky-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-sky-600 cursor-pointer active:scale-95 transition-all flex flex-shrink-0 items-center justify-center gap-2 shadow-md shadow-sky-500/20"
+                >
+                  <FiSave className="w-4 h-4" /> <span className="hidden sm:inline">Save</span>
+                </button>
+              </div>
             </div>
-            
-            <div className="flex items-center gap-1 relative z-20 pointer-events-auto">
-              <button 
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  const bName = buildings.find(b => b.id === currentBuilding)?.name;
-                  setEditBuildingName(bName || '');
-                  setIsEditingBuilding(true);
-                }} 
-                className="p-2 text-slate-400 hover:text-sky-500 bg-slate-50 hover:bg-sky-50 dark:bg-slate-900 dark:hover:bg-sky-500/10 rounded-lg transition-colors cursor-pointer" 
-                title="Edit Building Name"
-              >
-                <FiEdit3 className="w-4 h-4" />
-              </button>
-              <button 
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  setBuildingToDelete(buildings.find(b => b.id === currentBuilding)); 
-                }} 
-                className="p-2 text-slate-400 hover:text-rose-500 bg-slate-50 hover:bg-rose-50 dark:bg-slate-900 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer" 
-                title="Delete Building"
-              >
-                <FiTrash2 className="w-4 h-4" />
-              </button>
+          ) : (
+            <div className="flex items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-xl shadow-sm relative hover:border-sky-300 dark:hover:border-sky-700 transition-colors">
+              {buildings.length > 1 && (
+                <select 
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  value={currentBuilding || ''}
+                  onChange={(e) => setBuilding(e.target.value)}
+                >
+                  {buildings.map(b => (
+                    <option key={b.id} value={b.id} className="text-slate-800">{b.name}</option>
+                  ))}
+                </select>
+              )}
+              
+              <div className="flex flex-col flex-1 relative pointer-events-none pr-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base font-black text-slate-800 dark:text-slate-100">
+                    {buildings.find(b => b.id === currentBuilding)?.name || 'Unknown Building'}
+                  </span>
+                  {buildings.length > 1 && <FiChevronDown className="w-4 h-4 text-slate-400" />}
+                </div>
+                <span className="text-[10px] font-bold text-sky-500 uppercase tracking-widest">{floors.length} Floors Active</span>
+              </div>
+              
+              <div className="flex items-center gap-1 relative z-20 pointer-events-auto">
+                <button 
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    const bName = buildings.find(b => b.id === currentBuilding)?.name;
+                    setEditBuildingName(bName || '');
+                    setIsEditingBuilding(true);
+                  }} 
+                  className="p-2 text-slate-400 hover:text-sky-500 bg-slate-50 hover:bg-sky-50 dark:bg-slate-900 dark:hover:bg-sky-500/10 rounded-lg transition-colors cursor-pointer" 
+                  title="Edit Building Name"
+                >
+                  <FiEdit3 className="w-4 h-4" />
+                </button>
+                <button 
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    setBuildingToDelete(buildings.find(b => b.id === currentBuilding)); 
+                  }} 
+                  className="p-2 text-slate-400 hover:text-rose-500 bg-slate-50 hover:bg-rose-50 dark:bg-slate-900 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer" 
+                  title="Delete Building"
+                >
+                  <FiTrash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* ── MELA MAIN GROUND MAP HERO CARD ── */}
       {isMela && (
@@ -633,7 +654,7 @@ export default function FloorManager() {
                   type="button"
                   onClick={() => handleStartEdit(floor)}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-950/40 transition-colors cursor-pointer"
-                  title="Edit Floor"
+                  title={isMela ? "Edit Sector" : "Edit Floor"}
                 >
                   <FiEdit3 className="w-3.5 h-3.5" />
                 </button>
@@ -703,10 +724,10 @@ export default function FloorManager() {
               
               <div className="flex flex-col gap-2">
                 <h4 className="text-sm font-extrabold text-slate-850 dark:text-slate-105 tracking-wide">
-                  Delete Floor Blueprint?
+                  {isMela ? 'Delete Sector Map?' : 'Delete Floor Blueprint?'}
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed px-1">
-                  Are you sure you want to delete <strong className="text-slate-700 dark:text-slate-200">"{floorToDelete.name}"</strong>? All map data and Points of Interest on this floor level will be permanently erased.
+                  Are you sure you want to delete <strong className="text-slate-700 dark:text-slate-200">"{floorToDelete.name}"</strong>? {isMela ? 'All map data and Points of Interest in this sector will be permanently erased.' : 'All map data and Points of Interest on this floor level will be permanently erased.'}
                 </p>
               </div>
 
@@ -726,7 +747,7 @@ export default function FloorManager() {
                     try {
                       await deleteFloor(floorToDelete.id);
                       setFloorToDelete(null);
-                      addToast("Floor deleted successfully", "success");
+                      addToast(isMela ? "Sector deleted successfully" : "Floor deleted successfully", "success");
                     } finally {
                       setIsDeletingFloor(false);
                     }
@@ -759,10 +780,10 @@ export default function FloorManager() {
               
               <div className="flex flex-col gap-2">
                 <h4 className="text-sm font-extrabold text-slate-850 dark:text-slate-105 tracking-wide">
-                  Delete Entire Building?
+                  {isMela ? 'Delete Mela Area?' : 'Delete Entire Building?'}
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed px-1">
-                  Are you sure you want to delete <strong className="text-slate-700 dark:text-slate-200">"{buildingToDelete.name}"</strong>? This will permanently delete ALL floors, map data, and Points of Interest associated with this building! This action cannot be undone.
+                  Are you sure you want to delete <strong className="text-slate-700 dark:text-slate-200">"{buildingToDelete.name}"</strong>? {isMela ? 'This will permanently delete all sectors and map data associated with this area.' : 'This will permanently delete ALL floors, map data, and Points of Interest associated with this building!'} This action cannot be undone.
                 </p>
               </div>
 

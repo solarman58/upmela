@@ -54,6 +54,50 @@ const pool = mysql.createPool({
   ssl:                process.env.DB_HOST.includes('tidbcloud') ? { minVersion: 'TLSv1.2', rejectUnauthorized: true } : false,
 });
 
+// ── CONCURRENCY & TRANSACTION LOCK SAFETY ──────────────────────────────────────
+const projectSaveQueues = new Map();
+
+function runWithProjectLock(projectId, fn) {
+  const prevPromise = projectSaveQueues.get(projectId) || Promise.resolve();
+  const currentPromise = prevPromise
+    .catch(() => {}) // Don't let previous failures break future queue items
+    .then(fn);
+
+  projectSaveQueues.set(projectId, currentPromise);
+
+  currentPromise.finally(() => {
+    if (projectSaveQueues.get(projectId) === currentPromise) {
+      projectSaveQueues.delete(projectId);
+    }
+  });
+
+  return currentPromise;
+}
+
+async function executeWithRetry(operation, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (err) {
+      const isLockError = 
+        err.code === 'ER_LOCK_WAIT_TIMEOUT' || 
+        err.code === 'ER_LOCK_DEADLOCK' ||
+        (err.message && (
+          err.message.includes('Lock wait timeout') ||
+          err.message.includes('deadlock')
+        ));
+
+      if (isLockError && attempt < maxRetries) {
+        const delay = attempt * 150;
+        console.warn(`[TiDB Lock] Lock wait timeout/deadlock detected (attempt ${attempt}/${maxRetries}). Retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 // ── Create Tables On Startup ───────────────────────────────────────────────────
 async function initDB() {
   const conn = await pool.getConnection();
@@ -316,28 +360,32 @@ async function initDB() {
 
 // ── DATABASE BROWSER VIEWER ────────────────────────────────────────────────────
 
-// Serverless DB Auto-Init Middleware
+// Serverless & Standalone DB Auto-Init
 let isDbInitialized = false;
 let initDbPromise = null;
-app.use('/api', async (req, res, next) => {
-  if (!isDbInitialized) {
-    if (!initDbPromise) {
-      initDbPromise = initDB().then(() => {
-        isDbInitialized = true;
-        console.log('✅ DB tables & data ready');
-      }).catch(err => {
-        initDbPromise = null;
-        console.error('DB init failed:', err.message);
-        throw err;
-      });
-    }
-    try {
-      await initDbPromise;
-    } catch (err) {
-      return res.status(500).json({ error: 'DB Init Error: ' + err.message });
-    }
+
+const ensureDbInit = () => {
+  if (isDbInitialized) return Promise.resolve();
+  if (!initDbPromise) {
+    initDbPromise = initDB().then(() => {
+      isDbInitialized = true;
+      console.log('✅ DB tables & data ready');
+    }).catch(err => {
+      initDbPromise = null;
+      console.error('DB init failed:', err.message);
+      throw err;
+    });
   }
-  next();
+  return initDbPromise;
+};
+
+app.use('/api', async (req, res, next) => {
+  try {
+    await ensureDbInit();
+    next();
+  } catch (err) {
+    return res.status(500).json({ error: 'DB Init Error: ' + err.message });
+  }
 });
 
 
@@ -1323,23 +1371,24 @@ app.get('/api/load-categories', async (req, res) => {
 });
 
 app.post('/api/save-categories', verifyToken, async (req, res) => {
-  const categories = req.body; // Expecting an array of categories
+  const categories = Array.isArray(req.body) ? req.body : [];
   const projectId = req.user.project_id || 'default';
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    // Delete all existing categories for project
     await conn.execute('DELETE FROM ap_categories WHERE project_id = ?', [projectId]);
-    
-    // Insert new ones
-    for (let i = 0; i < categories.length; i++) {
-      const c = categories[i];
+    if (categories.length > 0) {
+      const placeholders = categories.map(() => '(?, ?, ?, ?, ?, ?)').join(',');
+      const values = [];
+      for (let i = 0; i < categories.length; i++) {
+        const c = categories[i];
+        values.push(c.id, projectId, c.name, c.icon, c.color, i);
+      }
       await conn.execute(
-        'INSERT INTO ap_categories (id, project_id, name, icon, color, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
-        [c.id, projectId, c.name, c.icon, c.color, i]
+        `INSERT INTO ap_categories (id, project_id, name, icon, color, sort_order) VALUES ${placeholders}`,
+        values
       );
     }
-    
     await conn.commit();
     res.json({ success: true });
   } catch (err) {
@@ -1564,69 +1613,100 @@ app.get('/api/load-graph', async (req, res) => {
 app.post('/api/save-graph', verifyToken, async (req, res) => {
   const { nodes = [], edges = [] } = req.body;
   const projectId = req.user.project_id || 'default';
-  const conn = await pool.getConnection();
+
   try {
-    const limits = await checkTrialLimits(conn, projectId, 'nodes', nodes.length);
-    if (!limits.allowed) {
-      conn.release();
-      return res.status(403).json({ error: limits.error });
-    }
+    await runWithProjectLock(projectId, async () => {
+      await executeWithRetry(async () => {
+        const conn = await pool.getConnection();
+        try {
+          try { await conn.execute('SET SESSION innodb_lock_wait_timeout = 8'); } catch(e) {}
 
-    await conn.beginTransaction();
+          const limits = await checkTrialLimits(conn, projectId, 'nodes', nodes.length);
+          if (!limits.allowed) {
+            return res.status(403).json({ error: limits.error });
+          }
 
-    // Upsert nodes
-    for (const n of nodes) {
-      await conn.execute(`
-        INSERT INTO ap_nodes (id, project_id, floor, x, y, name, category, type, description, status, image_url, is_custom)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-        ON DUPLICATE KEY UPDATE
-          floor=VALUES(floor), x=VALUES(x), y=VALUES(y), name=VALUES(name),
-          category=VALUES(category), type=VALUES(type), description=VALUES(description),
-          status=VALUES(status), image_url=VALUES(image_url), is_custom=VALUES(is_custom)
-      `, [
-        n.id, projectId, n.floor, n.x, n.y, n.name,
-        n.category||null, n.type||null, n.description||'',
-        n.status||'Open', n.imageUrl||null, n.isCustom ? 1 : 0
-      ]);
-    }
-    // Delete removed nodes
-    if (nodes.length > 0) {
-      const ph = nodes.map(() => '?').join(',');
-      await conn.execute(`DELETE FROM ap_nodes WHERE project_id = ? AND id NOT IN (${ph})`, [projectId, ...nodes.map(n => n.id)]);
-    } else {
-      await conn.execute('DELETE FROM ap_nodes WHERE project_id = ?', [projectId]);
-    }
+          await conn.beginTransaction();
 
-    // Upsert edges
-    for (const e of edges) {
-      await conn.execute(`
-        INSERT INTO ap_edges (id, project_id, \`from\`, \`to\`, distance, bidirectional, \`accessible\`, blocked)
-        VALUES (?,?,?,?,?,?,?,?)
-        ON DUPLICATE KEY UPDATE
-          \`from\`=VALUES(\`from\`), \`to\`=VALUES(\`to\`), distance=VALUES(distance),
-          bidirectional=VALUES(bidirectional), \`accessible\`=VALUES(\`accessible\`), blocked=VALUES(blocked)
-      `, [
-        e.id, projectId, e.from, e.to, e.distance||0,
-        e.bidirectional !== false ? 1 : 0,
-        e.accessible    !== false ? 1 : 0,
-        e.blocked ? 1 : 0
-      ]);
-    }
-    // Delete removed edges
-    if (edges.length > 0) {
-      const ph = edges.map(() => '?').join(',');
-      await conn.execute(`DELETE FROM ap_edges WHERE project_id = ? AND id NOT IN (${ph})`, [projectId, ...edges.map(e => e.id)]);
-    } else {
-      await conn.execute('DELETE FROM ap_edges WHERE project_id = ?', [projectId]);
-    }
+          // 1. Batch Upsert nodes (chunks of 50 to maximize speed and minimize locks)
+          const CHUNK_SIZE = 50;
+          for (let i = 0; i < nodes.length; i += CHUNK_SIZE) {
+            const chunk = nodes.slice(i, i + CHUNK_SIZE);
+            const placeholders = chunk.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?)').join(',');
+            const values = [];
+            for (const n of chunk) {
+              values.push(
+                n.id, projectId, n.floor, n.x, n.y, n.name,
+                n.category || null, n.type || null, n.description || '',
+                n.status || 'Open', n.imageUrl || null, n.isCustom ? 1 : 0
+              );
+            }
+            await conn.execute(`
+              INSERT INTO ap_nodes (id, project_id, floor, x, y, name, category, type, description, status, image_url, is_custom)
+              VALUES ${placeholders}
+              ON DUPLICATE KEY UPDATE
+                floor=VALUES(floor), x=VALUES(x), y=VALUES(y), name=VALUES(name),
+                category=VALUES(category), type=VALUES(type), description=VALUES(description),
+                status=VALUES(status), image_url=VALUES(image_url), is_custom=VALUES(is_custom)
+            `, values);
+          }
 
-    await conn.commit();
-    res.json({ success: true });
+          // 2. Delete removed nodes
+          if (nodes.length > 0) {
+            const ph = nodes.map(() => '?').join(',');
+            await conn.execute(`DELETE FROM ap_nodes WHERE project_id = ? AND id NOT IN (${ph})`, [projectId, ...nodes.map(n => n.id)]);
+          } else {
+            await conn.execute('DELETE FROM ap_nodes WHERE project_id = ?', [projectId]);
+          }
+
+          // 3. Batch Upsert edges (chunks of 50)
+          for (let i = 0; i < edges.length; i += CHUNK_SIZE) {
+            const chunk = edges.slice(i, i + CHUNK_SIZE);
+            const placeholders = chunk.map(() => '(?,?,?,?,?,?,?,?)').join(',');
+            const values = [];
+            for (const e of chunk) {
+              values.push(
+                e.id, projectId, e.from, e.to, e.distance || 0,
+                e.bidirectional !== false ? 1 : 0,
+                e.accessible !== false ? 1 : 0,
+                e.blocked ? 1 : 0
+              );
+            }
+            await conn.execute(`
+              INSERT INTO ap_edges (id, project_id, \`from\`, \`to\`, distance, bidirectional, \`accessible\`, blocked)
+              VALUES ${placeholders}
+              ON DUPLICATE KEY UPDATE
+                \`from\`=VALUES(\`from\`), \`to\`=VALUES(\`to\`), distance=VALUES(distance),
+                bidirectional=VALUES(bidirectional), \`accessible\`=VALUES(\`accessible\`), blocked=VALUES(blocked)
+            `, values);
+          }
+
+          // 4. Delete removed edges
+          if (edges.length > 0) {
+            const ph = edges.map(() => '?').join(',');
+            await conn.execute(`DELETE FROM ap_edges WHERE project_id = ? AND id NOT IN (${ph})`, [projectId, ...edges.map(e => e.id)]);
+          } else {
+            await conn.execute('DELETE FROM ap_edges WHERE project_id = ?', [projectId]);
+          }
+
+          await conn.commit();
+        } catch (err) {
+          try { await conn.rollback(); } catch(e) {}
+          throw err;
+        } finally {
+          conn.release();
+        }
+      });
+    });
+
+    if (!res.headersSent) {
+      res.json({ success: true });
+    }
   } catch (err) {
-    try { await conn.rollback(); } catch(e) {}
-    res.status(500).json({ error: err.message });
-  } finally {
-    conn.release();
+    console.error('Error saving graph:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 
@@ -1644,23 +1724,38 @@ app.get('/api/load-routes', async (req, res) => {
 app.post('/api/save-routes', verifyToken, async (req, res) => {
   const routes = Array.isArray(req.body) ? req.body : [];
   const projectId = req.user.project_id || 'default';
-  const conn = await pool.getConnection();
   try {
-    await conn.beginTransaction();
-    await conn.execute('DELETE FROM ap_custom_routes WHERE project_id = ?', [projectId]);
-    for (const r of routes) {
-      await conn.execute(
-        'INSERT INTO ap_custom_routes (id, project_id, name, node_ids, distance) VALUES (?,?,?,?,?)',
-        [r.id, projectId, r.name||'', JSON.stringify(r.node_ids||[]), r.distance||0]
-      );
-    }
-    await conn.commit();
+    await runWithProjectLock(projectId, async () => {
+      await executeWithRetry(async () => {
+        const conn = await pool.getConnection();
+        try {
+          try { await conn.execute('SET SESSION innodb_lock_wait_timeout = 8'); } catch(e) {}
+          await conn.beginTransaction();
+          await conn.execute('DELETE FROM ap_custom_routes WHERE project_id = ?', [projectId]);
+          if (routes.length > 0) {
+            const placeholders = routes.map(() => '(?,?,?,?,?)').join(',');
+            const values = [];
+            for (const r of routes) {
+              values.push(r.id, projectId, r.name || '', JSON.stringify(r.node_ids || []), r.distance || 0);
+            }
+            await conn.execute(
+              `INSERT INTO ap_custom_routes (id, project_id, name, node_ids, distance) VALUES ${placeholders}`,
+              values
+            );
+          }
+          await conn.commit();
+        } catch (err) {
+          try { await conn.rollback(); } catch(e) {}
+          throw err;
+        } finally {
+          conn.release();
+        }
+      });
+    });
     res.json({ success: true });
   } catch (err) {
-    try { await conn.rollback(); } catch(e) {}
+    console.error('Error saving routes:', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    conn.release();
   }
 });
 
@@ -1766,7 +1861,7 @@ if (require.main === module) {
   });
 }
 
-initDB().catch(err => {
+ensureDbInit().catch(err => {
   console.warn('?? DB init warning:', err.message);
 });
 

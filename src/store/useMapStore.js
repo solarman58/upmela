@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { calculateShortestPath } from '../utils/pathfinder';
 
-const saveGraph = async (nodes, edges) => {
+// Professional Debounced & Queued Graph Persistence (Prevents DB Lock Timeouts & Freezes)
+let saveTimer = null;
+let isSaving = false;
+let pendingSave = null;
+
+const executeSaveGraph = async (nodes, edges) => {
+  isSaving = true;
   const state = useMapStore.getState();
   try {
     const response = await fetch('/api/save-graph', {
@@ -17,12 +23,46 @@ const saveGraph = async (nodes, edges) => {
       const errorMsg = errData.error || 'Failed to save graph.';
       console.error('Failed to save Graph via API:', errorMsg);
       state.addToast(errorMsg, 'error');
-      state.loadMapData(); // Revert state
     }
   } catch (e) {
     console.error('Failed to save Graph via API', e);
     state.addToast('Network error while saving.', 'error');
+  } finally {
+    isSaving = false;
+    if (pendingSave) {
+      const next = pendingSave;
+      pendingSave = null;
+      executeSaveGraph(next.nodes, next.edges);
+    }
   }
+};
+
+const saveGraph = (nodes, edges, debounceMs = 300) => {
+  pendingSave = { nodes, edges };
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+  }
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    if (!isSaving && pendingSave) {
+      const data = pendingSave;
+      pendingSave = null;
+      executeSaveGraph(data.nodes, data.edges);
+    }
+  }, debounceMs);
+};
+
+const saveGraphImmediate = (nodes, edges) => {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  if (isSaving) {
+    pendingSave = { nodes, edges };
+    return;
+  }
+  pendingSave = null;
+  executeSaveGraph(nodes, edges);
 };
 
 const computePoisFromNodes = (nodes) => {
@@ -287,7 +327,7 @@ export const useMapStore = create((set, get) => ({
     const updatedNodes = nodes.map(n => n.id === id ? { ...n, x: Math.round(x), y: Math.round(y) } : n);
     const computedPois = computePoisFromNodes(updatedNodes);
     set({ nodes: updatedNodes, pois: computedPois });
-    saveGraph(updatedNodes, edges);
+    saveGraph(updatedNodes, edges, 500);
     get().calculateRoute();
   },
 
@@ -299,7 +339,7 @@ export const useMapStore = create((set, get) => ({
       edges: updatedEdges,
       selectedEdge: sel?.id === id ? { ...sel, controlPoint: { x: Math.round(cx), y: Math.round(cy) } } : sel
     });
-    saveGraph(nodes, updatedEdges);
+    saveGraph(nodes, updatedEdges, 500);
     get().calculateRoute();
   },
 
@@ -838,7 +878,7 @@ export const useMapStore = create((set, get) => ({
         throw new Error(errData.error || 'Failed to delete floor from API');
       }
       set({ floors: updatedFloors, nodes: updatedNodes, edges: updatedEdges, pois: computePoisFromNodes(updatedNodes), currentFloor: nextFloor });
-      saveGraph(updatedNodes, updatedEdges);
+      saveGraphImmediate(updatedNodes, updatedEdges);
     } catch (e) {
       console.error('Failed to delete floor', e);
       get().addToast(e.message, 'error');
@@ -861,7 +901,7 @@ export const useMapStore = create((set, get) => ({
   },
 
   resetToDefaults: () => {
-    saveGraph([], []);
+    saveGraphImmediate([], []);
     set({ nodes: [], edges: [], pois: {}, selectedPoi: null });
   },
 }));

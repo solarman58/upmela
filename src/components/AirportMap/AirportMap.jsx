@@ -71,7 +71,7 @@ export default function AirportMap() {
     searchQuery, activeFilters,
     navigationMode, navigationStart, navigationEnd, navigationPath, navigationDistance,
     setNavigationMode, setNavigationStart, setNavigationEnd,
-    taggingMode, taggingCoords, setTaggingCoords,
+    taggingMode, taggingCoords, setTaggingCoords, setTaggingMode,
     loadMapData, theme,
     mapRotation, setMapRotation,
     pendingZoom, clearPendingZoom,
@@ -127,9 +127,20 @@ export default function AirportMap() {
 
   const transformRef = useRef(null);
   const svgOverlayRef = useRef(null);
+  const mouseDownPosRef = useRef({ x: 0, y: 0 });
 
   // ── SVG Coordinate Calculation ────────────────────────────────────────────
   const handleMapClick = useCallback((e) => {
+    // Check if mouse was dragged (pan) - if so, do not drop pin
+    const dist = Math.hypot(e.clientX - mouseDownPosRef.current.x, e.clientY - mouseDownPosRef.current.y);
+    if (dist > 6) return;
+
+    // In edge drawing mode, clicking empty canvas cancels active start node
+    if (isDrawingEdges && edgeStartNodeId) {
+      setEdgeStartNodeId(null);
+      return;
+    }
+
     if (!taggingMode) return;
     const svg = svgOverlayRef.current;
     if (!svg) return;
@@ -146,7 +157,7 @@ export default function AirportMap() {
     const svgY = Math.round(rawY * scaleY);
 
     setTaggingCoords({ x: svgX, y: svgY });
-  }, [taggingMode, setTaggingCoords]);
+  }, [taggingMode, isDrawingEdges, edgeStartNodeId, setTaggingCoords]);
 
   // ── Node Dragging SVG Handlers ────────────────────────────────────────────
   const handleNodeMouseDown = (e, node) => {
@@ -199,22 +210,27 @@ export default function AirportMap() {
       const startingNode = nodes.find(n => n.id === nodeId);
       if (startingNode) {
         setMousePos({ x: startingNode.x, y: startingNode.y });
+        useMapStore.getState().addToast(`Selected "${startingNode.name || 'Node'}". Click 2nd node to connect.`, 'info');
       }
     } else {
       if (edgeStartNodeId !== nodeId) {
+        const fromNode = nodes.find(n => n.id === edgeStartNodeId);
+        const toNode = nodes.find(n => n.id === nodeId);
         // Check if edge already exists
         const existingEdge = edges.find(e =>
           (e.from === edgeStartNodeId && e.to === nodeId) ||
           (e.from === nodeId && e.to === edgeStartNodeId)
         );
 
+        toggleEdge(edgeStartNodeId, nodeId);
+
         if (existingEdge) {
-          // If exists, toggleEdge will delete it
-          toggleEdge(edgeStartNodeId, nodeId);
+          useMapStore.getState().addToast(`Disconnected "${fromNode?.name || 'Node'}" & "${toNode?.name || 'Node'}"`, 'info');
         } else {
-          // Default to auto-calculated Euclidean distance
-          toggleEdge(edgeStartNodeId, nodeId);
+          useMapStore.getState().addToast(`Path connected: "${fromNode?.name || 'Node'}" <-> "${toNode?.name || 'Node'}"`, 'success');
         }
+      } else {
+        useMapStore.getState().addToast('Selection cleared', 'info');
       }
       setEdgeStartNodeId(null);
     }
@@ -226,6 +242,26 @@ export default function AirportMap() {
       setEdgeStartNodeId(null);
     }
   }, [isDrawingEdges]);
+
+  // Keyboard shortcut: Escape cancels node selection or exits mode
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (edgeStartNodeId) {
+          setEdgeStartNodeId(null);
+          useMapStore.getState().addToast('Path connection cancelled', 'info');
+        } else if (isDrawingEdges) {
+          setIsDrawingEdges(false);
+          useMapStore.getState().addToast('Edge Mode exited', 'info');
+        } else if (taggingMode) {
+          setTaggingMode(false);
+          useMapStore.getState().addToast('Tagging Mode exited', 'info');
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [edgeStartNodeId, isDrawingEdges, taggingMode, setIsDrawingEdges, setTaggingMode]);
 
   // ── Floor Map Renderer ────────────────────────────────────────────────────
   const renderMap = () => {
@@ -281,6 +317,7 @@ export default function AirportMap() {
   };
 
   const activePoiIds = getActivePoiIds();
+  const inEditMode = Boolean(taggingMode || isDrawingEdges);
 
   // ── Helper: smooth zoom to SVG coordinate (Google Maps style) ─────────────
   const zoomToSvgPoint = useCallback((svgX, svgY, targetScale = 4) => {
@@ -299,6 +336,11 @@ export default function AirportMap() {
   // ── pendingZoom watcher — fires immediately when store sets a zoom target ──
   useEffect(() => {
     if (!pendingZoom || !transformRef.current) return;
+    // In edit mode (tagging or drawing edges), disable auto zoom
+    if (inEditMode) {
+      clearPendingZoom();
+      return;
+    }
     const { x, y, scale } = pendingZoom;
     zoomToSvgPoint(x, y, scale);
     // Blink the nearest node
@@ -308,29 +350,34 @@ export default function AirportMap() {
       setTimeout(() => setBlinkPoiId(null), 2000);
     }
     clearPendingZoom();
-  }, [pendingZoom, zoomToSvgPoint, clearPendingZoom, currentFloor, nodes]);
+  }, [pendingZoom, zoomToSvgPoint, clearPendingZoom, currentFloor, nodes, inEditMode]);
 
-  // ── Auto-zoom + blink to selected POI (search/explore) ───────────────────
+  // ── Auto-zoom + blink to selected POI (DISABLED in edit mode to prevent sudden camera jumps) ──
   useEffect(() => {
     if (!selectedPoi) return;
+    // In edit mode (tagging or drawing edges), DO NOT auto-zoom or blink!
+    if (inEditMode) return;
     // Give floor transition time if needed
     const doZoom = () => {
       zoomToSvgPoint(selectedPoi.x, selectedPoi.y, 3.5);
       setBlinkPoiId(selectedPoi.id);
       setTimeout(() => setBlinkPoiId(null), 2000);
     };
-    setTimeout(doZoom, 200);
-  }, [selectedPoi, zoomToSvgPoint]);
+    const timer = setTimeout(doZoom, 200);
+    return () => clearTimeout(timer);
+  }, [selectedPoi, zoomToSvgPoint, inEditMode]);
 
-  // ── Reset on floor change (skip if navigating to not override zoom) ────────
+  // ── Reset on floor change (skip if navigating to not override zoom, or in edit mode) ──
   useEffect(() => {
     // If navigation is active, don't reset - we'll zoom to the entry point instead
     if (window.__mapSkipNextReset) {
       window.__mapSkipNextReset = false;
       return;
     }
+    // In edit mode, do not auto-reset zoom on floor change so editor maintains scale
+    if (inEditMode) return;
     if (transformRef.current) transformRef.current.resetTransform(400, 'easeOut');
-  }, [currentFloor]);
+  }, [currentFloor, inEditMode]);
 
   // ── Category → marker color ───────────────────────────────────────────────
   const getCategoryColor = (cat) => {
@@ -762,17 +809,30 @@ export default function AirportMap() {
     <div className="w-full h-full relative overflow-hidden bg-slate-50 dark:bg-[#030712] transition-colors duration-500">
       {/* Tagging mode active visual feedback */}
       {taggingMode && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1 px-4 py-2 rounded-full bg-amber-500/90 backdrop-blur text-white text-xs font-bold shadow-xl pointer-events-none text-center animate-pulse">
-          <span>📍 Click on map to place a node</span>
-          <span className="text-[10px] opacity-80 font-normal">Drag any node to move it</span>
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-0.5 px-4 py-2 rounded-2xl bg-slate-900/90 border border-amber-500/40 backdrop-blur-md text-white text-xs font-bold shadow-2xl pointer-events-none text-center">
+          <span className="text-amber-400 font-extrabold flex items-center gap-1.5">
+            📍 Tagging Mode Active
+          </span>
+          <span className="text-[10px] text-slate-300 font-normal">
+            Click map to place pin · Drag node to move · Esc to exit
+          </span>
         </div>
       )}
 
       {/* Edge drawing cursor banner */}
       {isDrawingEdges && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1 px-4 py-2 rounded-full bg-indigo-500/90 backdrop-blur text-white text-xs font-bold shadow-xl pointer-events-none text-center animate-pulse">
-          <span>🔗 Edge Drawing Mode Active</span>
-          <span className="text-[10px] opacity-80 font-normal">Click a node, then click another node to connect/disconnect them</span>
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-0.5 px-4 py-2 rounded-2xl bg-slate-900/90 border border-indigo-500/40 backdrop-blur-md text-white text-xs font-bold shadow-2xl pointer-events-none text-center">
+          <span className="text-indigo-400 font-extrabold flex items-center gap-1.5">
+            🔗 Edge Mode Active
+            {edgeStartNodeId && (
+              <span className="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full text-[10px] border border-amber-400/30">
+                1st node selected - click 2nd node
+              </span>
+            )}
+          </span>
+          <span className="text-[10px] text-slate-300 font-normal">
+            {edgeStartNodeId ? 'Click another node to connect · Esc or empty map to cancel' : 'Click 1st node to start · Drag empty map to pan · Esc to exit'}
+          </span>
         </div>
       )}
 
@@ -866,6 +926,9 @@ export default function AirportMap() {
         return (
           <div
             className="w-full h-full relative"
+            onMouseDownCapture={(e) => {
+              mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
+            }}
             onTouchStartCapture={handleTouchStart}
             onTouchMoveCapture={handleTouchMove}
             onTouchEndCapture={handleTouchEnd}
@@ -884,10 +947,10 @@ export default function AirportMap() {
               centerOnInit={!isMobile}
               centerZoomedOut={!isMobile}
               limitToBounds={false}
-              doubleClick={{ disabled: false }}
+              doubleClick={{ disabled: inEditMode }}
               panning={{
                 velocityDisabled: true,
-                disabled: taggingMode || isDrawingEdges || draggedNodeId !== null,
+                disabled: draggedNodeId !== null || draggedEdgeHandleId !== null,
                 excluded: []
               }}
               pinch={{ disabled: false }}
@@ -960,7 +1023,7 @@ export default function AirportMap() {
                           }`}
                         viewBox="0 0 1000 600"
                         onClick={handleMapClick}
-                      >
+                      onContextMenu={(e) => { if (edgeStartNodeId) { e.preventDefault(); setEdgeStartNodeId(null); } }}>
                         <defs>
                           <marker id="nav-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
                             <path d="M 2 1 L 9 5 L 2 9 L 4 5 z" fill="#ffffff" stroke="#0284c7" strokeWidth="1" strokeLinejoin="round" />
@@ -985,8 +1048,7 @@ export default function AirportMap() {
                         {/* Temporary placement coords feedback */}
                         {taggingMode && taggingCoords && (
                           <g transform={`translate(${taggingCoords.x}, ${taggingCoords.y})`}>
-                            <circle r="18" fill="#f59e0b" className="opacity-20 animate-ping" />
-                            <circle r="10" fill="#f59e0b" className="opacity-40 animate-pulse" />
+                            <circle r="14" fill="#f59e0b" fillOpacity="0.25" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="3,3" />
                             <circle r="5" fill="#f59e0b" stroke="#fff" strokeWidth="1.5" />
                             <text x="0" y="-14" fontFamily="Outfit, sans-serif" fontSize="9" fontWeight="bold" fill="#f59e0b" textAnchor="middle">
                               {taggingCoords.x}, {taggingCoords.y}
@@ -1003,6 +1065,7 @@ export default function AirportMap() {
                           const isStart = navigationStart?.id === poi.id;
                           const isEnd = navigationEnd?.id === poi.id;
                           const isEdgeStart = edgeStartNodeId === poi.id;
+                          const isCandidateTarget = isDrawingEdges && edgeStartNodeId && edgeStartNodeId !== poi.id;
                           const cat = categories?.find(c => c.id === poi.category);
                           const color = cat?.color || getCategoryColor(poi.category);
 
@@ -1025,14 +1088,17 @@ export default function AirportMap() {
                                 onMouseDown={(e) => handleNodeMouseDown(e, poi)}
                               >
                                 {isEdgeStart && (
-                                  <circle r="14" fill="none" stroke="#f59e0b" strokeWidth="2" strokeDasharray="3,3" className="animate-spin" style={{ animationDuration: '6s' }} />
+                                  <circle r="14" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeDasharray="3,3" />
+                                )}
+                                {isCandidateTarget && (
+                                  <circle r="14" fill="none" stroke="#10b981" strokeWidth="2" strokeDasharray="3,3" />
                                 )}
                                 <circle
                                   r={isSelected || isEdgeStart ? '8' : '5'}
                                   fill={isEdgeStart ? '#f59e0b' : (isSelected ? '#0ea5e9' : '#64748b')}
                                   stroke="#fff"
                                   strokeWidth="1.5"
-                                  className="transition-all hover:scale-125"
+                                  className={inEditMode ? "" : "transition-all hover:scale-125"}
                                 />
                                 {(taggingMode || isDrawingEdges) && (
                                   <text y="-10" fontSize="7" fontWeight="bold" fill={theme === 'dark' ? '#94a3b8' : '#475569'} textAnchor="middle" className="opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1089,22 +1155,25 @@ export default function AirportMap() {
                             >
                               <title>{matchedSectorFloor ? `⛺ Click to open ${matchedSectorFloor.name} detailed map` : poi.name}</title>
                               {isEdgeStart && (
-                                <circle r="22" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeDasharray="3,3" className="animate-spin" style={{ animationDuration: '6s' }} />
+                                <circle r="22" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeDasharray="4,4" />
                               )}
-                              {/* Blink ring when zoomed to via search */}
-                              {blinkPoiId === poi.id && (
+                              {isCandidateTarget && (
+                                <circle r="22" fill="none" stroke="#10b981" strokeWidth="2" strokeDasharray="4,4" />
+                              )}
+                              {/* Blink ring when zoomed to via search (disabled in edit mode) */}
+                              {!inEditMode && blinkPoiId === poi.id && (
                                 <>
                                   <circle r="28" fill="none" stroke="#fbbf24" strokeWidth="3" className="animate-ping" style={{ animationDuration: '0.6s' }} />
                                   <circle r="20" fill="none" stroke="#f59e0b" strokeWidth="2" className="animate-ping" style={{ animationDuration: '0.8s', animationDelay: '0.1s' }} />
                                 </>
                               )}
-                              {(isSelected || isStart || isEnd) && (
+                              {!inEditMode && (isSelected || isStart || isEnd) && (
                                 <>
                                   <circle r="16" fill={color} className="opacity-25 animate-ping" />
                                   <circle r="10" fill={color} className="opacity-40 animate-pulse" />
                                 </>
                               )}
-                              {!(isSelected || isStart || isEnd) && isActive && zoomScale < 1.05 && <circle r="12" fill={color} className="opacity-15 animate-ping" />}
+                              {!inEditMode && !(isSelected || isStart || isEnd) && isActive && zoomScale < 1.05 && <circle r="12" fill={color} className="opacity-15 animate-ping" />}
 
                               {isStart && (
                                 <g transform="translate(0,-10)">
@@ -1157,7 +1226,7 @@ export default function AirportMap() {
 
                               {/* Label Badge (Transparent Halo Text) */}
                               {(zoomScale >= 1.05 || isSelected || taggingMode || isDrawingEdges) && (
-                                <g transform="translate(0, 0)" pointerEvents="auto" className="transition-all duration-300 drop-shadow-md">
+                                <g transform="translate(0, 0)" pointerEvents="auto" className={inEditMode ? "drop-shadow-md" : "transition-all duration-300 drop-shadow-md"}>
 
                                   {/* Halo Background Outline */}
                                   <text fontFamily="Outfit, sans-serif" textAnchor="middle" fill="none" stroke={theme === 'dark' ? '#0f172a' : '#ffffff'} strokeWidth="4.5" strokeLinejoin="round" className="opacity-90">
@@ -1181,7 +1250,7 @@ export default function AirportMap() {
                                       <>
                                         <g transform={`translate(0, ${-boxHeight / 2 + 8})`} className="drop-shadow-md">
                                           {matchedSectorFloor && (
-                                            <circle r="18" fill="none" stroke="#10b981" strokeWidth="2.5" strokeDasharray="5,3" className="animate-spin" style={{ animationDuration: '8s' }} />
+                                            <circle r="18" fill="none" stroke="#10b981" strokeWidth="2.5" strokeDasharray="5,3" className={inEditMode ? "" : "animate-spin"} style={inEditMode ? {} : { animationDuration: '8s' }} />
                                           )}
                                           <circle r="13" fill={badgeBg} />
                                           <circle r="13" fill="none" stroke="#ffffff" strokeWidth="1.5" className="opacity-90" />
@@ -1220,7 +1289,7 @@ export default function AirportMap() {
                               )}
 
                               {/* Red locator search query pin */}
-                              {searchQuery.trim() !== '' && isActive && (
+                              {!inEditMode && searchQuery.trim() !== '' && isActive && (
                                 <g className="animate-search-pin" transform={`translate(0, ${zoomScale >= 1.05 ? -22 : -10})`} pointerEvents="none">
                                   <path
                                     d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"

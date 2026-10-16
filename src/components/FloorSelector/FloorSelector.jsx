@@ -336,7 +336,7 @@ export default function FloorSelector() {
         <button 
           onClick={() => setShowBuildings(!showBuildings)}
           className="w-8 h-8 rounded-full backdrop-blur-md border flex items-center justify-center mb-1 shadow-lg bg-white/70 dark:bg-slate-900/60 border-slate-200/50 text-slate-400 hover:text-sky-500"
-          title="Switch Building"
+          title={isMela ? "Switch Sector" : "Switch Building"}
         >
           <FiLayers className="w-4 h-4" />
         </button>

@@ -5,7 +5,8 @@ import { useMapStore } from '../../store/useMapStore';
 import { FiSearch, FiX, FiMapPin } from 'react-icons/fi';
 
 export default function Search({ compact = false }) {
-  const { searchQuery, setSearchQuery, selectPoi, pois, floors, currentFloor, setFloor, zoomMapTo } = useMapStore();
+  const { searchQuery, setSearchQuery, selectPoi, pois, floors, currentFloor, setFloor, zoomMapTo, appSettings } = useMapStore();
+  const isMela = appSettings?.project_type === 'Mela' || appSettings?.project_type === 'Kumbh Mela';
   const [suggestions, setSuggestions] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const searchRef = useRef(null);
@@ -140,7 +141,7 @@ export default function Search({ compact = false }) {
                     <h4 className="font-medium text-slate-800 dark:text-slate-100 text-sm flex items-center gap-2 flex-wrap">
                       <span className="truncate">{poi.name}</span>
                       <span className="text-[10px] shrink-0 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded">
-                        {floors.find(f => f.id === poi.floor)?.name || 'Unknown Floor'}
+                        {floors.find(f => f.id === poi.floor)?.name || (isMela ? 'Mela Sector' : 'Unknown Floor')}
                       </span>
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 truncate w-full">
