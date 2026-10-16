@@ -182,30 +182,3 @@ body.is-app-page #root {
   .qr-print-modal, .qr-print-modal * { visibility: visible; }
   .qr-print-modal { position: absolute; left: 0; top: 0; width: 100%; }
 }
-
-/* ── Google Translate Clean Integration ───────────────────────────────────── */
-.goog-te-banner-frame,
-.skiptranslate.goog-te-gadget,
-#goog-gt-tt,
-.goog-te-balloon-frame {
-  display: none !important;
-  visibility: hidden !important;
-}
-
-body {
-  top: 0px !important;
-  position: static !important;
-}
-
-.goog-text-highlight {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-#google_translate_element {
-  position: absolute;
-  top: -9999px;
-  left: -9999px;
-  opacity: 0;
-  pointer-events: none;
-}

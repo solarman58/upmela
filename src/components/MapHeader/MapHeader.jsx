@@ -7,7 +7,6 @@ import {
   FiRotateCcw, FiRotateCw, FiX
 } from 'react-icons/fi';
 import Search from '../Search/Search';
-import LanguageButton from '../LanguageSelector/LanguageButton';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 
 export default function MapHeader() {
@@ -78,11 +77,8 @@ export default function MapHeader() {
             <Search compact />
           </div>
 
-          {/* RIGHT: Mobile — essential buttons */}
+          {/* RIGHT: Mobile — only essential 3 buttons */}
           <div className="flex items-center gap-1.5 flex-shrink-0 md:hidden">
-            {/* Language Selector */}
-            <LanguageButton />
-
             {/* Full Screen */}
             <button
               onClick={toggleFullScreen}
@@ -102,9 +98,6 @@ export default function MapHeader() {
 
           {/* RIGHT: Desktop — all controls */}
           <div className="hidden md:flex items-center gap-1.5 flex-shrink-0">
-            {/* Language Selector */}
-            <LanguageButton />
-
             {/* Rotation */}
             <div className="flex items-center bg-violet-50 dark:bg-violet-950/30 border border-violet-200/50 dark:border-violet-800/40 rounded-xl p-0.5 gap-0.5">
               <button onClick={() => setMapRotation(mapRotation - 45)} className="w-8 h-8 rounded-lg flex items-center justify-center text-violet-500 hover:bg-violet-100 active:scale-90 transition-all">
