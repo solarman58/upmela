@@ -1330,6 +1330,23 @@ const checkTrialLimits = async (conn, projectId, resource, incomingCount) => {
 };
 
 // ── SETTINGS / PROJECT ────────────────────────────────────────────────────────
+app.get('/api/live-status', async (req, res) => {
+  try {
+    const [dbInfo] = await pool.execute('SELECT DATABASE() as db, @@hostname as host');
+    const [nodeCount] = await pool.execute("SELECT count(*) as c FROM ap_nodes WHERE project_id = 'upmela'");
+    res.json({
+      db_name: dbInfo[0]?.db,
+      db_host: dbInfo[0]?.host,
+      env_db_host: process.env.DB_HOST,
+      env_db_name: process.env.DB_NAME,
+      env_db_user: process.env.DB_USER,
+      upmela_nodes: nodeCount[0]?.c
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/load-settings', async (req, res) => {
   try {
     const projectId = await resolveProjectId(req.query.project);
