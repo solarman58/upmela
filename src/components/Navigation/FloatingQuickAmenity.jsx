@@ -117,11 +117,20 @@ export default function FloatingQuickAmenity({ onOpenDirections }) {
 
                 {/* Open Directions Action */}
                 <button
+                  type="button"
                   onClick={() => {
                     setPromptNeedStart(false);
+                    if (pendingAmenityId) {
+                      useMapStore.setState({ quickAmenityCategory: pendingAmenityId });
+                    }
+                    useMapStore.getState().setNavigationMode(true);
+                    useMapStore.getState().setIsSidebarOpen?.(true);
                     if (onOpenDirections) onOpenDirections();
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('map:open-directions', { detail: { focus: 'from', pendingAmenityId } }));
+                    }
                   }}
-                  className="py-2.5 px-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer border border-slate-700"
+                  className="py-2.5 px-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-xs flex items-center justify-center gap-1 active:scale-95 transition-all cursor-pointer border border-slate-700 pointer-events-auto touch-manipulation"
                 >
                   <span>सूची से चुनें ➔</span>
                 </button>

@@ -991,7 +991,15 @@ export default function AirportMap() {
           >
             {/* Overlay UI components */}
             <FloorSelector />
-            <FloatingQuickAmenity onOpenDirections={() => { useMapStore.getState().setNavigationMode(true); }} />
+            <FloatingQuickAmenity
+              onOpenDirections={() => {
+                useMapStore.getState().setNavigationMode(true);
+                useMapStore.getState().setIsSidebarOpen?.(true);
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('map:open-directions', { detail: { focus: 'from' } }));
+                }
+              }}
+            />
 
             <TransformWrapper
               ref={transformRef}

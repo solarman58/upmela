@@ -78,10 +78,14 @@ export default function Sidebar() {
       setIsOpen(false);
       useMapStore.getState().setIsSidebarOpen?.(false);
     };
-    const handleOpenDirections = () => {
+    const handleOpenDirections = (e) => {
+      setNavigationMode(true);
       setActiveTab('navigate');
       setIsOpen(true);
       useMapStore.getState().setIsSidebarOpen?.(true);
+      setTimeout(() => {
+        setActiveSelect('from');
+      }, 120);
     };
 
     window.addEventListener('map:poi-selected', handleClose);
@@ -656,7 +660,17 @@ export default function Sidebar() {
                     placeholder="Starting point..."
                     options={allNavigableNodes.map(p => ({ value: p.id, label: `${p.name} · ${capitalize(p.floor)}` }))}
                     value={navigationStart?.id || ''}
-                    onChange={val => { setNavigationStart(nodes.find(p => p.id === val)); setActiveSelect(null); }}
+                    onChange={val => {
+                      const startNode = nodes.find(p => p.id === val);
+                      setNavigationStart(startNode);
+                      setActiveSelect(null);
+                      const cat = useMapStore.getState().quickAmenityCategory;
+                      if (cat && val) {
+                        setTimeout(() => {
+                          useMapStore.getState().findNearestAmenity(val, cat);
+                        }, 50);
+                      }
+                    }}
                     isControlledOpen={activeSelect === 'from'}
                     onOpen={() => setActiveSelect('from')}
                     onClose={() => setActiveSelect(null)}
