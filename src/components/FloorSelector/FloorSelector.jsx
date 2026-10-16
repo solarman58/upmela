@@ -27,7 +27,7 @@ export default function FloorSelector() {
   const {
     floors, currentFloor, setFloor,
     buildings, currentBuilding, setBuilding,
-    appSettings, setIsSectorModalOpen
+    appSettings, setIsSectorModalOpen, isFullScreen
   } = useMapStore();
 
   const isMela = appSettings?.project_type === 'Mela' || appSettings?.project_type === 'Kumbh Mela' || floors?.some(f => f.level === 'MAIN' || (f.level && f.level.startsWith('S')));
@@ -130,7 +130,7 @@ export default function FloorSelector() {
           <button
             type="button"
             onClick={openModal}
-            className={`pointer-events-auto flex items-center gap-2 px-3.5 py-2 rounded-xl backdrop-blur-xl text-xs font-black shadow-xl border active:scale-95 transition-all cursor-pointer ${
+            className={`pointer-events-auto flex items-center gap-2 px-3.5 py-2 rounded-xl backdrop-blur-xl text-xs font-black shadow-xl border active:scale-95 transition-all cursor-pointer ${isFullScreen ? 'mr-14' : ''} ${
               isMainMelaFloor
                 ? 'bg-gradient-to-r from-amber-500/90 to-orange-500/90 text-white border-amber-300/40 shadow-orange-500/20'
                 : 'bg-slate-900/90 dark:bg-black/90 text-white border-slate-700/80 hover:border-amber-400'

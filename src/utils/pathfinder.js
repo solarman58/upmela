@@ -355,3 +355,176 @@ export function calculateShortestPath(nodes, edges, startNodeId, endNodeId, opti
 
   return null; // No path found
 }
+
+// Helper to match category keys, aliases, and localized tags
+export function matchesCategory(nodeCat, targetCat) {
+  if (!nodeCat || !targetCat) return false;
+  const n = String(nodeCat).toLowerCase().trim();
+  const t = String(targetCat).toLowerCase().trim();
+  if (n === t) return true;
+  const nClean = n.replace(/^upmela_c_/, '').replace(/^c_/, '');
+  const tClean = t.replace(/^upmela_c_/, '').replace(/^c_/, '');
+  if (nClean === tClean) return true;
+  if (nClean.includes(tClean) || tClean.includes(nClean)) return true;
+
+  const aliases = {
+    toilet: ['toilet', 'washroom', 'sanitation', 'urinal', 'restroom', 'bath'],
+    water: ['water', 'jal', 'peya', 'droplet'],
+    medical: ['medical', 'hospital', 'clinic', 'firstaid', 'doctor', 'icu', 'heartpulse'],
+    snanghat: ['snanghat', 'ghat', 'sangam', 'riverfront', 'waves'],
+    police: ['police', 'security', 'thana', 'khoya', 'lost', 'shield', 'chowki'],
+    akhara: ['akhara', 'camp', 'shivir', 'tent', 'ashram'],
+    bridge: ['bridge', 'pontoon', 'pipa', 'chevron'],
+    parking: ['parking', 'bus', 'car', 'vehicle'],
+    bhandara: ['bhandara', 'food', 'langar', 'annakshetra', 'utensils'],
+    temple: ['temple', 'mandir', 'shrine', 'landmark'],
+    gates: ['gate', 'pravesh', 'dwar', 'entry', 'dooropen']
+  };
+
+  for (const [key, list] of Object.entries(aliases)) {
+    const targetMatch = (tClean === key || list.some(item => tClean.includes(item)));
+    if (targetMatch && list.some(item => nClean.includes(item))) return true;
+  }
+  return false;
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// findNearestPOIs — Dijkstra-based nearest amenity search with intelligent fallback
+// ════════════════════════════════════════════════════════════════════════════════
+export function findNearestPOIs(nodes, edges, startNodeId, targetCategoryId, maxResults = 5) {
+  if (!startNodeId || !targetCategoryId || !nodes || !nodes.length) return [];
+
+  const startNode = nodes.find(n => n.id === startNodeId);
+  if (!startNode) return [];
+
+  const effectiveEdges = getEffectiveEdges(nodes, edges);
+
+  // Build adjacency list
+  const adjGraph = {};
+  nodes.forEach(n => { adjGraph[n.id] = { node: n, neighbors: [] }; });
+
+  effectiveEdges.forEach(e => {
+    const from = adjGraph[e.from];
+    const to = adjGraph[e.to];
+    if (!from || !to) return;
+
+    let weight;
+    if (e.distance !== undefined && e.distance !== null) {
+      weight = parseFloat(e.distance);
+    } else {
+      const dx = from.node.x - to.node.x;
+      const dy = from.node.y - to.node.y;
+      weight = Math.sqrt(dx * dx + dy * dy);
+      if (from.node.floor !== to.node.floor) weight += 150;
+    }
+
+    from.neighbors.push({ to: e.to, weight });
+    if (e.bidirectional !== false) {
+      to.neighbors.push({ to: e.from, weight });
+    }
+  });
+
+  // Single-source Dijkstra
+  const distMap = {};
+  const prev = {};
+  const visited = new Set();
+  nodes.forEach(n => { distMap[n.id] = Infinity; });
+  distMap[startNodeId] = 0;
+
+  const pq = [{ id: startNodeId, d: 0 }];
+
+  while (pq.length > 0) {
+    pq.sort((a, b) => a.d - b.d);
+    const { id: currentId, d: currentDist } = pq.shift();
+
+    if (visited.has(currentId)) continue;
+    visited.add(currentId);
+
+    const entry = adjGraph[currentId];
+    if (!entry) continue;
+
+    for (const neighbor of entry.neighbors) {
+      if (visited.has(neighbor.to)) continue;
+      const newDist = currentDist + neighbor.weight;
+      if (newDist < distMap[neighbor.to]) {
+        distMap[neighbor.to] = newDist;
+        prev[neighbor.to] = currentId;
+        pq.push({ id: neighbor.to, d: newDist });
+      }
+    }
+  }
+
+  // Collect all matching POIs from reachable Dijkstra path
+  const results = [];
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
+
+  nodes.forEach(n => {
+    if (n.id === startNodeId) return;
+    if (distMap[n.id] === Infinity) return;
+    const cat = n.category || n.type || '';
+    if (cat === 'waypoint') return;
+
+    if (matchesCategory(cat, targetCategoryId)) {
+      // Reconstruct path
+      const pathArr = [];
+      let temp = n.id;
+      while (temp !== undefined) {
+        const nObj = nodeMap[temp];
+        if (nObj) pathArr.unshift(nObj);
+        temp = prev[temp];
+      }
+
+      const distanceRaw = distMap[n.id];
+      const distanceInMeters = Math.round(distanceRaw * 0.5);
+      const estimatedTime = Math.max(1, Math.round(distanceInMeters / 80));
+
+      results.push({
+        node: n,
+        distance: distanceInMeters,
+        estimatedTime,
+        path: pathArr,
+        coordinates: pathArr.map(nd => ({ id: nd.id, x: nd.x, y: nd.y, floor: nd.floor })),
+        isDirectWalkable: true
+      });
+    }
+  });
+
+  if (results.length > 0) {
+    results.sort((a, b) => a.distance - b.distance);
+    return results.slice(0, maxResults);
+  }
+
+  // ── Fallback Proximity Search (Cross-sector or disconnected component) ──
+  const fallbackResults = [];
+  nodes.forEach(n => {
+    if (n.id === startNodeId) return;
+    const cat = n.category || n.type || '';
+    if (cat === 'waypoint') return;
+
+    if (matchesCategory(cat, targetCategoryId)) {
+      const dx = n.x - startNode.x;
+      const dy = n.y - startNode.y;
+      let rawDist = Math.sqrt(dx * dx + dy * dy);
+      if (n.floor !== startNode.floor) {
+        rawDist += 400; // cross-sector penalty
+      }
+      const distanceInMeters = Math.round(rawDist * 0.5);
+      const estimatedTime = Math.max(1, Math.round(distanceInMeters / 80));
+
+      const pathArr = [startNode, n];
+      fallbackResults.push({
+        node: n,
+        distance: distanceInMeters,
+        estimatedTime,
+        path: pathArr,
+        coordinates: pathArr.map(nd => ({ id: nd.id, x: nd.x, y: nd.y, floor: nd.floor })),
+        isDirectWalkable: false,
+        crossSector: n.floor !== startNode.floor
+      });
+    }
+  });
+
+  fallbackResults.sort((a, b) => a.distance - b.distance);
+  return fallbackResults.slice(0, maxResults);
+}

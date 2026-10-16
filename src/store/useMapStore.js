@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { calculateShortestPath } from '../utils/pathfinder';
+import { calculateShortestPath, findNearestPOIs } from '../utils/pathfinder';
 
 // Professional Debounced & Queued Graph Persistence (Prevents DB Lock Timeouts & Freezes)
 let saveTimer = null;
@@ -899,6 +899,84 @@ export const useMapStore = create((set, get) => ({
     a.href = url; a.download = `${floor}_nodes.json`; a.click();
     URL.revokeObjectURL(url);
   },
+
+
+  // ── Mobile Sidebar Open State ───────────────────────────────────────────────
+  isSidebarOpen: true,
+  setIsSidebarOpen: (isOpen) => set({ isSidebarOpen: isOpen }),
+
+  // ── Quick Amenity (Nearest POI Search) ──────────────────────────────────────
+  quickAmenityResults: null,    // Array of nearest results or null
+  quickAmenityCategory: null,   // Currently selected amenity category ID
+  quickAmenityStartNode: null,  // The node used as starting point
+  quickAmenityLoading: false,
+
+  findNearestAmenity: (startNodeId, categoryId) => {
+    const { nodes, edges } = get();
+    if (!startNodeId || !categoryId) return;
+    
+    set({ quickAmenityLoading: true, quickAmenityCategory: categoryId, quickAmenityStartNode: nodes.find(n => n.id === startNodeId) || null });
+    
+    // Run Dijkstra-based nearest search (runs synchronously but fast for <1000 nodes)
+    const results = findNearestPOIs(nodes, edges, startNodeId, categoryId, 5);
+    
+    set({ quickAmenityResults: results, quickAmenityLoading: false });
+    
+    // If we found at least one result, auto-highlight the best one on the map
+    if (results.length > 0) {
+      const best = results[0];
+      // Switch to the correct floor if needed
+      if (best.node.floor !== get().currentFloor) {
+        set({ currentFloor: best.node.floor });
+      }
+    }
+    
+    return results;
+  },
+
+  navigateToAmenity: (result) => {
+    if (!result || !result.node) return;
+    const startNode = get().quickAmenityStartNode || get().navigationStart;
+    if (!startNode) return;
+
+    // Switch floor if destination or start is on another floor
+    if (startNode.floor !== get().currentFloor) {
+      window.__mapSkipNextReset = true;
+      get().setFloor(startNode.floor);
+    }
+    
+    // Use the existing navigation system
+    set({
+      navigationMode: true,
+      navigationStart: startNode,
+      navigationEnd: result.node,
+      navigationPath: result.coordinates,
+      navigationDistance: result.distance,
+      navigationEstimatedTime: result.estimatedTime,
+      navigationRoutes: [{ ...result, type: 'Standard', totalDistance: result.distance }],
+      activeRouteIndex: 0,
+      // Clear quick amenity results so directions timeline takes over
+      quickAmenityResults: null,
+      quickAmenityCategory: null,
+      isSidebarOpen: false,
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('map:close-sidebar'));
+    }
+
+    // Smoothly focus on starting point or path
+    setTimeout(() => {
+      get().zoomMapTo(startNode.x, startNode.y, 3.5);
+    }, 300);
+  },
+
+  clearQuickAmenity: () => set({
+    quickAmenityResults: null,
+    quickAmenityCategory: null,
+    quickAmenityStartNode: null,
+    quickAmenityLoading: false,
+  }),
 
   resetToDefaults: () => {
     saveGraphImmediate([], []);

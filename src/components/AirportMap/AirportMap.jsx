@@ -8,6 +8,7 @@ import { useIndoorPositioning } from '../../hooks/useIndoorPositioning';
 import { findMatchingSectorFloor } from '../../utils/melaUtils';
 import UserLocationMarker from './UserLocationMarker';
 import FloorSelector from '../FloorSelector/FloorSelector';
+import FloatingQuickAmenity from '../Navigation/FloatingQuickAmenity';
 
 const getLabelLines = (name) => {
   if (!name) return [];
@@ -80,7 +81,7 @@ export default function AirportMap() {
     nodes, edges, dragNode, dragEdgeCurve, toggleEdge, isDrawingEdges, setIsDrawingEdges,
     selectedEdge, setSelectedEdge, setZoomActions,
     userPosition, categories,
-    isLoadingBuilding, appSettings
+    isLoadingBuilding, appSettings, isFullScreen
   } = useMapStore();
 
   const isMela = appSettings?.project_type === 'Mela' || appSettings?.project_type === 'Kumbh Mela';
@@ -88,6 +89,12 @@ export default function AirportMap() {
   const isMainMelaFloor = currentFloorObj?.level === 'MAIN';
 
   const { isActive, error: ipsError, startTracking, stopTracking } = useIndoorPositioning();
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // ── Multi-Touch Rotation Handlers (Smooth & Lag-Free) ─────────────────────
   const handleTouchStart = useCallback((e) => {
@@ -836,27 +843,17 @@ export default function AirportMap() {
         </div>
       )}
 
-      {/* Navigation active overlay — only tracking status, no duplicate banner */}
+      {/* Navigation active overlay — HUD pill at bottom (Zero overlap with top Sector & Mukhya Map buttons) */}
       {navigationMode && (
-        <div className="absolute left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-2 w-[90%] md:w-auto max-w-sm pointer-events-none" style={{ top: '72px' }}>
-
-          {/* Start Tracking Button (mobile only — desktop doesn't need live tracking) */}
-          {navigationStart && !isActive && (
-            <button
-              onClick={startTracking}
-              className="md:hidden bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 animate-bounce cursor-pointer pointer-events-auto"
-            >
-              <span>📍</span> Start Live Tracking
-            </button>
-          )}
-
-          {isActive && (
-            <div className="bg-emerald-500/90 backdrop-blur text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-lg flex items-center gap-2 pointer-events-auto">
-              <span className="animate-pulse">🟢</span> Tracking Active
-              <button onClick={stopTracking} className="ml-2 underline opacity-80 hover:opacity-100 cursor-pointer">Stop</button>
-            </div>
-          )}
-
+        <div
+          className="absolute left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-2 w-[94%] max-w-md pointer-events-none transition-all duration-300"
+          style={{
+            bottom: isMobile
+              ? (isFullScreen ? '16px' : 'calc(66px + env(safe-area-inset-bottom, 6px))')
+              : '20px'
+          }}
+        >
+          {/* Tracking / Path alerts */}
           {(() => {
             if (!userPosition || !navigationEnd || !isActive) return null;
 
@@ -865,38 +862,96 @@ export default function AirportMap() {
 
             if (isDestinationReached) {
               return (
-                <div className="bg-emerald-600/95 text-white text-xs font-extrabold px-4 py-2 rounded-full shadow-lg animate-bounce border-2 border-emerald-300">
-                  🎉 You have reached your destination!
+                <div className="bg-emerald-600/95 text-white text-xs font-extrabold px-4 py-2 rounded-full shadow-lg animate-bounce border-2 border-emerald-300 pointer-events-auto">
+                  🎉 मंजिल पर पहुँच गए! (Destination reached)
                 </div>
               );
             }
 
             if (userPosition.isOffRoute) {
               return (
-                <div className="bg-rose-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-pulse">
-                  ⚠ Off Route! Recalculating...
+                <div className="bg-rose-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-pulse pointer-events-auto">
+                  ⚠️ रास्ते से बाहर! री-कैलकुलेटिंग...
                 </div>
               );
             }
 
             if (userPosition.isWrongDirection) {
               return (
-                <div className="bg-orange-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-pulse flex items-center gap-1.5 border-2 border-orange-400/50">
-                  <span className="text-[10px]">↩️</span> Wrong Direction
+                <div className="bg-orange-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg animate-pulse flex items-center gap-1.5 border-2 border-orange-400/50 pointer-events-auto">
+                  <span className="text-[10px]">↩️</span> गलत दिशा (Wrong Direction)
                 </div>
               );
             }
 
-            return (
-              <div className="bg-sky-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
-                <span className="text-[10px]">✅</span> On Correct Path
-              </div>
-            );
+            return null;
           })()}
 
-          {ipsError && (
-            <div className="bg-rose-500/90 text-white text-[10px] px-3 py-1 rounded-full shadow-lg">
-              {ipsError}
+          {isActive && (
+            <div className="bg-emerald-500/90 backdrop-blur text-white px-3 py-1 rounded-full text-[11px] font-bold shadow-lg flex items-center gap-1.5 pointer-events-auto">
+              <span className="animate-pulse">🟢</span> Live GPS Active
+              <button onClick={stopTracking} className="ml-1.5 underline opacity-80 hover:opacity-100 cursor-pointer">Stop</button>
+            </div>
+          )}
+
+          {/* Active Navigation HUD Pill */}
+          {navigationPath && navigationPath.length > 0 && navigationEnd && (
+            <div className="w-full p-2.5 sm:p-3 rounded-2xl bg-slate-900/95 dark:bg-black/95 text-white border border-amber-500/40 shadow-2xl backdrop-blur-xl flex items-center justify-between gap-2.5 pointer-events-auto">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shrink-0 shadow-md">
+                  <span className="text-base">🧭</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 leading-none">
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-amber-400 truncate">
+                      {navigationEnd.name}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-extrabold text-slate-200 mt-0.5 leading-none">
+                    <strong className="text-emerald-400">{navigationDistance}m</strong>
+                    <span className="text-slate-400 text-[10px] ml-1 font-semibold">
+                      (~{Math.max(1, Math.round(navigationDistance / 80))} min पैदल)
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Live tracking button */}
+                {navigationStart && !isActive && (
+                  <button
+                    onClick={startTracking}
+                    className="px-2.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black shadow-md flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+                    title="Live GPS/Sensor Tracking"
+                  >
+                    <span>📍</span>
+                    <span className="hidden sm:inline">Track</span>
+                  </button>
+                )}
+
+                {/* Open turn-by-turn directions */}
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('map:open-directions'));
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+                  title="रास्ते के चरण देखें"
+                >
+                  <span>📋</span>
+                  <span>चरण</span>
+                </button>
+
+                {/* End Navigation button */}
+                <button
+                  onClick={() => {
+                    useMapStore.getState().setNavigationMode(false);
+                  }}
+                  className="w-7 h-7 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 flex items-center justify-center text-xs font-black active:scale-90 transition-all cursor-pointer"
+                  title="रास्ता समाप्त करें"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -936,6 +991,7 @@ export default function AirportMap() {
           >
             {/* Overlay UI components */}
             <FloorSelector />
+            <FloatingQuickAmenity onOpenDirections={() => { useMapStore.getState().setNavigationMode(true); }} />
 
             <TransformWrapper
               ref={transformRef}

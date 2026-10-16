@@ -8,6 +8,7 @@ import TaggingPanel from './TaggingPanel';
 import FloorManager from './FloorManager';
 import SettingsManager from './SettingsManager';
 import CategoryManager from './CategoryManager';
+import QuickAmenityFinder from '../Navigation/QuickAmenityFinder';
 import { useVoiceGuidance } from '../../hooks/useVoiceGuidance';
 import * as LucideIcons from 'lucide-react';
 import {
@@ -59,6 +60,7 @@ export default function Sidebar() {
   }, []);
 
   // Voice guidance (FREE — Web Speech API)
+
   const {
     voiceEnabled, isSpeaking, isSupported,
     toggleVoice, announceRoute, announceStep
@@ -70,12 +72,30 @@ export default function Sidebar() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Auto-close sidebar on mobile when a POI is selected via search
+  // Auto-close sidebar on mobile when a POI or route is selected
   useEffect(() => {
-    const handler = () => { if (window.innerWidth < 768) setIsOpen(false); };
-    window.addEventListener('map:poi-selected', handler);
-    return () => window.removeEventListener('map:poi-selected', handler);
+    const handleClose = () => {
+      setIsOpen(false);
+      useMapStore.getState().setIsSidebarOpen?.(false);
+    };
+    const handleOpenDirections = () => {
+      setActiveTab('navigate');
+      setIsOpen(true);
+      useMapStore.getState().setIsSidebarOpen?.(true);
+    };
+
+    window.addEventListener('map:poi-selected', handleClose);
+    window.addEventListener('map:close-sidebar', handleClose);
+    window.addEventListener('map:open-directions', handleOpenDirections);
+
+    return () => {
+      window.removeEventListener('map:poi-selected', handleClose);
+      window.removeEventListener('map:close-sidebar', handleClose);
+      window.removeEventListener('map:open-directions', handleOpenDirections);
+    };
   }, []);
+
+
 
   const {
     currentFloor, setFloor, floors, pois, selectPoi,
@@ -89,8 +109,12 @@ export default function Sidebar() {
     navigationDistance,
     navigationOptions, setNavigationOptions,
     navigationRoutes, activeRouteIndex, setActiveRouteIndex,
-    nodes, isAdminMode
+    nodes, isAdminMode, setIsSidebarOpen
   } = useMapStore();
+
+  useEffect(() => {
+    useMapStore.getState().setIsSidebarOpen?.(isOpen);
+  }, [isOpen]);
 
   // Helper: close sidebar, switch to start floor, then zoom to starting point
   const viewOnMap = () => {
@@ -120,16 +144,28 @@ export default function Sidebar() {
 
   const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+  // When a route is actively started on mobile, transition directly to the map view!
+  useEffect(() => {
+    if (isMobile && navigationPath && navigationPath.length > 0) {
+      setIsOpen(false);
+      useMapStore.getState().setIsSidebarOpen?.(false);
+    }
+  }, [isMobile, navigationPath]);
+
+  // Switch to admin tagging tab if tagging mode is turned on
   useEffect(() => {
     if (taggingMode && activeTab !== 'tagging') {
       setActiveTab('tagging');
-      if (!isOpen) setIsOpen(true);
+      setIsOpen(true);
     }
+  }, [taggingMode, activeTab]);
+
+  // Keep active tab on 'navigate' when navigationMode is active without forcing sidebar open
+  useEffect(() => {
     if (navigationMode && activeTab !== 'navigate') {
       setActiveTab('navigate');
-      if (!isOpen) setIsOpen(true);
     }
-  }, [taggingMode, navigationMode, activeTab, isOpen]);
+  }, [navigationMode, activeTab]);
 
   // Auto-announce route summary when route is first calculated
   useEffect(() => {
@@ -163,6 +199,7 @@ export default function Sidebar() {
 
   const allTabs = [
     { id: 'explore', label: 'Explore', icon: <FiSearch className="w-3.5 h-3.5" /> },
+    { id: 'amenities', label: 'सुविधाएं', icon: <span className="text-xs">⚡</span> },
     { id: 'navigate', label: 'Directions', icon: <FiCompass className="w-3.5 h-3.5" /> },
     { id: 'tagging', label: 'Tag', icon: <FiEdit3 className="w-3.5 h-3.5" /> },
     { id: 'floors', label: isMela ? 'Sectors' : 'Floors', icon: <FiLayers className="w-3.5 h-3.5" /> },
@@ -173,7 +210,7 @@ export default function Sidebar() {
 
   const tabs = isAdminMode
     ? allTabs
-    : allTabs.filter(t => t.id === 'explore' || t.id === 'navigate');
+    : allTabs.filter(t => t.id === 'explore' || t.id === 'amenities' || t.id === 'navigate');
 
   const compileDirections = () => {
     if (!navigationPath?.length || !navigationStart || !navigationEnd) return [];
@@ -573,6 +610,33 @@ export default function Sidebar() {
         </motion.div>
       )}
 
+      {/* ── Amenities Tab ──────────────────────────────────────────────── */}
+      {activeTab === 'amenities' && (
+        <motion.div key="amenities" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="flex flex-col gap-3">
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/60 dark:border-slate-800/60">
+            <div>
+              <h3 className="text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                <span className="text-base text-amber-500">⚡</span> मेला त्वरित सुविधाएं (Quick Amenities)
+              </h3>
+              <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                1-टैप में सबसे नज़दीकी शौचालय, पेयजल, चिकित्सा व घाट खोजें
+              </p>
+            </div>
+          </div>
+          
+          <QuickAmenityFinder
+            fullView={true}
+            onSelectStartPrompt={() => {
+              setActiveTab('navigate');
+              setActiveSelect('from');
+            }}
+            onNavigateSuccess={() => {
+              if (isMobile) setIsOpen(false);
+            }}
+          />
+        </motion.div>
+      )}
+
       {/* Navigate */}
       {activeTab === 'navigate' && (
         <motion.div key="navigate" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="flex flex-col gap-4">
@@ -612,6 +676,9 @@ export default function Sidebar() {
                   />
                 </div>
               </div>
+
+              {/* ⚡ Quick Amenity (1-Tap Nearest Facility) */}
+              <QuickAmenityFinder onSelectStartPrompt={() => setActiveSelect('from')} onNavigateSuccess={() => { if (isMobile) setIsOpen(false); }} />
 
               {/* Options */}
               <div className="flex gap-3 px-1 text-xs">
@@ -777,7 +844,8 @@ export default function Sidebar() {
   if (isMobile) {
     const navItems = [
       { id: 'explore', label: 'Explore', emoji: '🔍', color: 'sky', action: () => { setActiveTab('explore'); setIsOpen(prev => activeTab === 'explore' ? !prev : true); setNavigationMode(false); } },
-      { id: 'navigate', label: 'Navigate', emoji: '🧭', color: 'indigo', action: () => { setActiveTab('navigate'); setIsOpen(prev => activeTab === 'navigate' ? !prev : true); setNavigationMode(true); } },
+      { id: 'amenities', label: 'सुविधाएं', emoji: '⚡', color: 'amber', action: () => { setActiveTab('amenities'); setIsOpen(prev => activeTab === 'amenities' ? !prev : true); } },
+      { id: 'navigate', label: 'Directions', emoji: '🧭', color: 'indigo', action: () => { setActiveTab('navigate'); setIsOpen(prev => activeTab === 'navigate' ? !prev : true); setNavigationMode(true); } },
       { id: 'map', label: 'Map', emoji: '🗺️', color: 'emerald', action: () => setIsOpen(false) },
       ...(isAdminMode ? [{ id: 'floors', label: isMela ? 'Sectors' : 'Floors', emoji: isMela ? '⛺' : '🏢', color: 'violet', action: () => { setActiveTab('floors'); setIsOpen(prev => activeTab === 'floors' ? !prev : true); setNavigationMode(false); } }] : []),
       ...(isAdminMode ? [{ id: 'tagging', label: 'Admin', emoji: '⚙️', color: 'rose', action: () => { setActiveTab('tagging'); setIsOpen(prev => activeTab === 'tagging' ? !prev : true); setNavigationMode(false); } }] : []),
@@ -785,7 +853,8 @@ export default function Sidebar() {
     ];
 
     const colorMap = {
-      sky: { active: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/15' },
+      sky: { active: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500/15' },
+      amber: { active: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/20' },
       indigo: { active: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-500/15' },
       emerald: { active: 'text-emerald-500', bg: 'bg-emerald-500/12' },
       violet: { active: 'text-violet-500', bg: 'bg-violet-500/12' },

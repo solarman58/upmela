@@ -134,59 +134,41 @@ export default function MapHeader() {
         </div>
       )}
 
-      {/* ── Active Navigation Overlay ─────────── */}
-      <AnimatePresence>
-        {navigationPath && !isFullScreen && (
-          <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            className="fixed top-16 left-1/2 -translate-x-1/2 z-[60] pointer-events-auto"
-          >
-            <button
-              onClick={() => clearNavigation()}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-lg shadow-rose-500/30 transition-all active:scale-95 border border-rose-400/50"
-            >
-              <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              Stop Navigation
-              <FiX className="w-3.5 h-3.5 ml-1" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
-      {/* ── Floating Map Controls (zoom + rotation) ──── */}
+      {/* 🧭 Floating Map Controls (zoom + rotation - Side Vertically Centered) 🧭 */}
       {dataLoaded && !isSectorModalOpen && (
-        <div className={`fixed flex flex-row gap-3 pointer-events-auto transition-all ${
-          isFullScreen ? 'z-[60] bottom-8 left-1/2 -translate-x-1/2' : 'z-30 bottom-[90px] left-1/2 -translate-x-1/2 md:hidden'
+        <div className={`fixed right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2.5 pointer-events-auto transition-all select-none ${
+          isFullScreen 
+            ? 'z-[60]' 
+            : 'z-30 md:hidden'
         }`}>
-          {/* Zoom group */}
-          <div className="flex flex-row items-center bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-full shadow-xl border border-slate-200/60 dark:border-slate-700/40 px-1 overflow-hidden">
-            <button onClick={() => zoomActions?.zoomOut()} className="w-10 h-10 flex items-center justify-center text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 rounded-full transition-all active:scale-90">
-              <FiMinus className="w-4 h-4" />
+          {/* Zoom vertical group */}
+          <div className="flex flex-col items-center bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/60 p-1 overflow-hidden">
+            <button onClick={() => zoomActions?.zoomIn()} className="w-10 h-10 flex items-center justify-center text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xl transition-all active:scale-90 cursor-pointer" title="Zoom In (+)">
+              <FiPlus className="w-4 h-4 stroke-[2.5]" />
             </button>
-            <div className="w-px h-5 bg-slate-200/60 dark:bg-slate-700/40 mx-0.5" />
-            <button onClick={() => zoomActions?.resetTransform()} className="w-10 h-10 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full transition-all active:scale-90">
-              <FiMaximize2 className="w-3.5 h-3.5" />
+            <div className="w-5 h-px bg-slate-200/60 dark:bg-slate-700/40 my-0.5" />
+            <button onClick={() => zoomActions?.resetTransform()} className="w-10 h-10 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all active:scale-90 cursor-pointer" title="Reset View">
+              <FiMaximize2 className="w-4 h-4" />
             </button>
-            <div className="w-px h-5 bg-slate-200/60 dark:bg-slate-700/40 mx-0.5" />
-            <button onClick={() => zoomActions?.zoomIn()} className="w-10 h-10 flex items-center justify-center text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-full transition-all active:scale-90">
-              <FiPlus className="w-4 h-4" />
+            <div className="w-5 h-px bg-slate-200/60 dark:bg-slate-700/40 my-0.5" />
+            <button onClick={() => zoomActions?.zoomOut()} className="w-10 h-10 flex items-center justify-center text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 rounded-xl transition-all active:scale-90 cursor-pointer" title="Zoom Out (-)">
+              <FiMinus className="w-4 h-4 stroke-[2.5]" />
             </button>
           </div>
 
-          {/* Rotation group */}
-          <div className="flex flex-row items-center bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-full shadow-xl border border-slate-200/60 dark:border-slate-700/40 px-1 overflow-hidden">
-            <button onClick={() => setMapRotation(mapRotation - 45)} className="w-10 h-10 flex items-center justify-center text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-full transition-all active:scale-90">
-              <FiRotateCcw className="w-3.5 h-3.5" />
+          {/* Rotation vertical compact group (360 compass) */}
+          <div className="flex flex-col items-center bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-700/60 p-1 overflow-hidden">
+            <button onClick={() => setMapRotation(mapRotation - 45)} className="w-10 h-10 flex items-center justify-center text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-950/30 rounded-xl transition-all active:scale-90 cursor-pointer" title="Rotate Left (-45°)">
+              <FiRotateCcw className="w-4 h-4" />
             </button>
-            <div className="w-px h-5 bg-slate-200/60 dark:bg-slate-700/40 mx-0.5" />
-            <button onClick={() => setMapRotation(0)} className="w-10 h-10 flex items-center justify-center text-[10px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-full transition-all">
+            <div className="w-5 h-px bg-slate-200/60 dark:bg-slate-700/40 my-0.5" />
+            <button onClick={() => setMapRotation(0)} className="w-10 h-7 flex items-center justify-center text-[10.5px] font-black text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 rounded-lg transition-all active:scale-90 cursor-pointer" title="Reset North (0°)">
               {Math.round(mapRotation)}°
             </button>
-            <div className="w-px h-5 bg-slate-200/60 dark:bg-slate-700/40 mx-0.5" />
-            <button onClick={() => setMapRotation(mapRotation + 45)} className="w-10 h-10 flex items-center justify-center text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-950/30 rounded-full transition-all active:scale-90">
-              <FiRotateCw className="w-3.5 h-3.5" />
+            <div className="w-5 h-px bg-slate-200/60 dark:bg-slate-700/40 my-0.5" />
+            <button onClick={() => setMapRotation(mapRotation + 45)} className="w-10 h-10 flex items-center justify-center text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-950/30 rounded-xl transition-all active:scale-90 cursor-pointer" title="Rotate Right (+45°)">
+              <FiRotateCw className="w-4 h-4" />
             </button>
           </div>
         </div>
